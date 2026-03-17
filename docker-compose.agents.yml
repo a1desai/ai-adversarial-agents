@@ -1,0 +1,114 @@
+# =============================================================================
+# docker-compose.agents.yml — Stack 2: Agent Infrastructure
+# OWNER: Infra Hire
+# PURPOSE: Runs the LangGraph execution engine alongside Ollama and ChromaDB.
+# =============================================================================
+#
+# HOW TO USE:
+#   docker-compose -f docker-compose.agents.yml up -d
+#
+# NOTE: Ollama is expected to run on the HOST machine (not in Docker)
+#       because GPU passthrough in Docker is complex and platform-specific.
+#       The agent container reaches Ollama via host.docker.internal:11434.
+# =============================================================================
+
+version: "3.9"
+
+networks:
+  sandbox_agents:
+    external: true
+  sandbox_hypervisor:
+    external: true          # agents reach targets only through hypervisor
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Red Team Agent — LangGraph pipeline for autonomous exploitation
+  # ---------------------------------------------------------------------------
+  red_team_agent:
+    build:
+      context: .
+      dockerfile: agents/red_team/Dockerfile
+    container_name: agent_red_team
+    networks:
+      - sandbox_agents
+      - sandbox_hypervisor
+    volumes:
+      - ./agents:/app/agents:ro          # source code (read-only in container)
+      - ./prompts:/app/prompts:ro
+      - ./.chromadb:/app/.chromadb       # shared ChromaDB storage
+      - ./evaluation/traces:/app/traces  # trace logs written here
+    environment:
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - CHROMADB_PATH=/app/.chromadb
+      - LOG_LEVEL=INFO
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # reach host Ollama from container
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+    depends_on:
+      - hypervisor
+
+  # ---------------------------------------------------------------------------
+  # Blue Team Agent — LangGraph pipeline for autonomous patch generation
+  # ---------------------------------------------------------------------------
+  blue_team_agent:
+    build:
+      context: .
+      dockerfile: agents/blue_team/Dockerfile
+    container_name: agent_blue_team
+    networks:
+      - sandbox_agents
+      - sandbox_hypervisor
+    volumes:
+      - ./agents:/app/agents:ro
+      - ./prompts:/app/prompts:ro
+      - ./.chromadb:/app/.chromadb
+      - ./evaluation/traces:/app/traces
+    environment:
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - CHROMADB_PATH=/app/.chromadb
+      - LOG_LEVEL=INFO
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+    depends_on:
+      - hypervisor
+
+  # ---------------------------------------------------------------------------
+  # Hypervisor — network bridge + event relay (defined in its own compose file
+  # but referenced here as a dependency)
+  # ---------------------------------------------------------------------------
+  hypervisor:
+    build:
+      context: .
+      dockerfile: hypervisor/Dockerfile
+    container_name: sandbox_hypervisor
+    networks:
+      - sandbox_agents
+      - sandbox_hypervisor
+      - sandbox_targets
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_ADMIN   # needed for packet capture — only the hypervisor gets this
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  chromadb_data:

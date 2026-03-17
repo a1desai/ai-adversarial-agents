@@ -1,0 +1,38 @@
+# =============================================================================
+# docker-compose.yml — Top-Level Orchestrator
+# OWNER: Infra Hire
+# PURPOSE: Defines the three shared Docker networks. Each stack has its own
+#          compose file but all reference these networks.
+# =============================================================================
+#
+# NETWORK TOPOLOGY:
+#
+#   sandbox_targets   — isolated network for vulnerable apps (NO internet access)
+#   sandbox_agents    — network for LangGraph + Ollama + ChromaDB
+#   sandbox_hypervisor — bridge network: agents ↔ targets (ALL traffic logged here)
+#
+# The hypervisor is the ONLY bridge between agents and targets.
+# Agents cannot reach targets directly.
+# =============================================================================
+
+networks:
+  sandbox_targets:
+    driver: bridge
+    internal: true          # no external internet access
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+
+  sandbox_agents:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.21.0.0/24
+
+  sandbox_hypervisor:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.22.0.0/24

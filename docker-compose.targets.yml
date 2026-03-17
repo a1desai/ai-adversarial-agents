@@ -1,0 +1,126 @@
+# =============================================================================
+# docker-compose.targets.yml — Stack 1: Vulnerable Target Applications
+# OWNER: Infra Hire
+# SECURITY: All containers are hardened. Do not modify security settings.
+# =============================================================================
+#
+# HOW TO USE:
+#   docker-compose -f docker-compose.targets.yml up -d
+#
+# ADD NEW TARGETS:
+#   Copy the dvwa service block, rename it, point to the new image.
+#   Every target MUST include the security block (cap_drop, read_only, etc.)
+# =============================================================================
+
+version: "3.9"
+
+networks:
+  sandbox_targets:
+    external: true          # defined in docker-compose.yml
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # DVWA — Damn Vulnerable Web Application (Phase 1 dev/testing)
+  # NOT part of the benchmark — use for smoke testing your agents
+  # ---------------------------------------------------------------------------
+  dvwa:
+    image: ghcr.io/digininja/dvwa:latest
+    container_name: target_dvwa
+    networks:
+      - sandbox_targets
+    ports:
+      - "8080:80"           # accessible at http://localhost:8080 from hypervisor only
+    environment:
+      - DB_SERVER=dvwa_db
+      - DB_DATABASE=dvwa
+      - DB_USERNAME=dvwa
+      - DB_PASSWORD=p@ssw0rd
+    depends_on:
+      - dvwa_db
+    # -------------------------------------------------------------------------
+    # SECURITY BLOCK — copy this to every target, never remove or weaken
+    # -------------------------------------------------------------------------
+    cap_drop:
+      - ALL                 # drop all Linux capabilities
+    read_only: false        # DVWA needs write access to /var/www/html (uploads)
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  dvwa_db:
+    image: mysql:8.0
+    container_name: target_dvwa_db
+    networks:
+      - sandbox_targets
+    environment:
+      - MYSQL_DATABASE=dvwa
+      - MYSQL_USER=dvwa
+      - MYSQL_PASSWORD=p@ssw0rd
+      - MYSQL_ROOT_PASSWORD=rootpassword
+    volumes:
+      - dvwa_db_data:/var/lib/mysql
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  # ---------------------------------------------------------------------------
+  # WebGoat — OWASP WebGoat (Phase 1 dev/testing)
+  # ---------------------------------------------------------------------------
+  webgoat:
+    image: webgoat/webgoat:latest
+    container_name: target_webgoat
+    networks:
+      - sandbox_targets
+    ports:
+      - "8081:8080"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  # ---------------------------------------------------------------------------
+  # CVE-Bench targets — added by Infra Hire in Phase 1
+  #
+  # TODO (Infra Hire): Clone CVE-Bench v2.1.0, verify 5 containers build and
+  # run with grading endpoints, then add them here following the DVWA pattern.
+  #
+  # CVE-Bench repo: https://github.com/uiuc-kang-lab/cve-bench
+  #
+  # Each CVE-Bench target exposes a grading endpoint at /grade that the agents
+  # and the eval harness use to confirm successful exploitation / patching.
+  # ---------------------------------------------------------------------------
+  # cvebench_cve_2024_xxxx:
+  #   image: ...
+  #   container_name: target_cvebench_xxxx
+  #   networks:
+  #     - sandbox_targets
+  #   ports:
+  #     - "808X:80"
+  #   cap_drop:
+  #     - ALL
+  #   security_opt:
+  #     - no-new-privileges:true
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: "0.5"
+  #         memory: 512M
+
+volumes:
+  dvwa_db_data:
