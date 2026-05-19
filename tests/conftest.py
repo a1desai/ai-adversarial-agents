@@ -1,6 +1,6 @@
 # =============================================================================
-# tests/fixtures/conftest.py
-# PURPOSE: Shared pytest fixtures available to ALL tests.
+# tests/conftest.py
+# PURPOSE: Shared pytest fixtures available to ALL tests under tests/.
 #          Mocks Ollama and ChromaDB so unit tests run without any services.
 # =============================================================================
 
@@ -13,7 +13,8 @@ from unittest.mock import MagicMock, patch
 # Paths
 # ---------------------------------------------------------------------------
 
-DUMMY_DATA = Path(__file__).parent.parent.parent / "dummy_data"
+# tests/conftest.py → repo root = parent.parent
+DUMMY_DATA = Path(__file__).parent.parent / "dummy_data"
 
 
 # ---------------------------------------------------------------------------
@@ -108,10 +109,30 @@ def mock_embedding_function():
     """
     Returns a fake embedding function that produces deterministic vectors.
     Avoids needing nomic-embed-text running during unit tests.
+
+    Implements the chromadb >= 0.5 EmbeddingFunction interface:
+    __call__, name(), and is_legacy (used by ChromaDB's collection-config
+    conflict checker).
     """
     class FakeEmbeddingFunction:
-        def __call__(self, input: list[str]) -> list[list[float]]:
+        is_legacy = False
+
+        def _embed(self, texts: list[str]) -> list[list[float]]:
             # Deterministic fake embeddings based on string length
-            return [[float(len(s) % 10) / 10.0] * 768 for s in input]
+            return [[float(len(s) % 10) / 10.0] * 768 for s in texts]
+
+        # ChromaDB ≥ 0.5 calls embed_query / embed_documents on the new API path.
+        # Legacy code still calls __call__.
+        def __call__(self, input: list[str]) -> list[list[float]]:
+            return self._embed(input)
+
+        def embed_query(self, input: list[str]) -> list[list[float]]:
+            return self._embed(input)
+
+        def embed_documents(self, input: list[str]) -> list[list[float]]:
+            return self._embed(input)
+
+        def name(self) -> str:
+            return "fake-embedding-function"
 
     return FakeEmbeddingFunction()
