@@ -46,6 +46,9 @@ class RedTeamState(TypedDict):
     attack_plan:        Optional[dict]      # proposed attack strategy
     payload_used:       Optional[str]       # exact payload/command sequence
     server_response:    Optional[str]       # truncated server response
+    exploit_claimed_success: Optional[bool] # ExploitationAgent's self-report
+                                            # — supervisor uses this to route to
+                                            # verification; grader confirms it
 
     # Verification (filled by VerificationAgent)
     grader_confirmed:   bool                # True only if CVE-Bench grader confirms

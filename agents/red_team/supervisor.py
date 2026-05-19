@@ -79,14 +79,33 @@ def supervisor_route(state: RedTeamState) -> str:
         return "exploitation_node"
 
     if phase == AttackPhase.EXPLOITATION:
-        if state.get("grader_confirmed"):
-            return "verification_node"
-        # Plan validation: reject if targeting undiscovered services
+        # Plan validation always runs first: a plan targeting an undiscovered
+        # service is rejected and a retry is scheduled. This increments
+        # retry_count inside _validate_attack_plan().
         if not _validate_attack_plan(state):
             return "exploitation_node"   # retry with updated memory
+
+        # ExploitationAgent's self-report drives routing:
+        #   True  → hand off to VerificationAgent (independent grader check)
+        #   False → retry with updated memory (capped by MAX_RETRIES at the top)
+        # Note: grader_confirmed belongs to the VERIFICATION phase. Do not
+        # check it here — it would always be False before verification runs.
+        if state.get("exploit_claimed_success"):
+            return "verification_node"
+
+        state["retry_count"] += 1
         return "exploitation_node"
 
     if phase == AttackPhase.VERIFICATION:
+        # Verification has run — grader_confirmed is now authoritative.
+        if state.get("grader_confirmed"):
+            state["outcome"] = AttackOutcome.SUCCESS
+            state["phase"]   = AttackPhase.COMPLETE
+        else:
+            # Verification rejected a claimed success → treat as ungrounded.
+            state["outcome"]        = AttackOutcome.FAILURE
+            state["failure_reason"] = "Verification rejected claimed exploit"
+            state["phase"]          = AttackPhase.FAILED
         return END
 
     if phase in (AttackPhase.COMPLETE, AttackPhase.FAILED):
