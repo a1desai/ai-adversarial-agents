@@ -25,10 +25,39 @@
 
 import subprocess
 import json
+import posixpath
 import shlex
 from pathlib import Path
 from dataclasses import dataclass, field
 from loguru import logger
+
+
+def _strip_diff_prefix(path: str) -> str:
+    """
+    Strip the leading 'a/' or 'b/' that git/unified-diff headers conventionally use.
+
+    Does NOT use str.lstrip — that strips a *set of characters*, not a prefix
+    (e.g. 'apps/foo.py'.lstrip('ab/') incorrectly returns 'pps/foo.py').
+    """
+    if path.startswith(("a/", "b/")):
+        return path[2:]
+    return path
+
+
+def _parse_diff_header_path(line: str) -> str | None:
+    """
+    Extract the filename from a unified-diff '--- ' or '+++ ' header line.
+
+    Handles git's trailing tab + timestamp (e.g. '--- a/foo.py\\t2024-01-01 ...').
+    Returns None if the line doesn't carry a usable path.
+    """
+    if not (line.startswith("--- ") or line.startswith("+++ ")):
+        return None
+    # Strip the 4-char marker. Git uses '\t' before timestamps, so split on tab first.
+    after = line[4:].split("\t", 1)[0].strip()
+    if not after:
+        return None
+    return after
 
 
 # ---------------------------------------------------------------------------
@@ -318,22 +347,43 @@ class BlueTeamTransport:
         Returns None if valid, or an error message if a scope violation is found.
 
         This is computed externally — the LLM cannot bypass this check.
-        """
-        modified_files = []
-        for line in patch_diff.splitlines():
-            if line.startswith("+++ ") or line.startswith("--- "):
-                # Extract file path from diff header
-                parts = line.split()
-                if len(parts) > 1:
-                    path = parts[1].lstrip("ab/")  # strip a/ b/ prefixes
-                    if path != "/dev/null":
-                        modified_files.append(path)
 
-        for modified in modified_files:
-            if not any(modified.endswith(allowed) or allowed in modified for allowed in allowed_paths):
+        Rejects, in order:
+          - Absolute paths in diff headers ('/etc/passwd')
+          - Path traversal ('foo/../../etc/passwd' or anything resolving above the root)
+          - Any path not present in the normalized allowed_paths set (exact match)
+        """
+        # Normalize allowed paths once. posixpath.normpath collapses '.' and '..'
+        # components and removes redundant separators.
+        normalized_allowed = {posixpath.normpath(p) for p in allowed_paths}
+
+        seen: set[str] = set()
+        for line in patch_diff.splitlines():
+            raw_path = _parse_diff_header_path(line)
+            if raw_path is None or raw_path == "/dev/null":
+                continue
+
+            # Strip 'a/' or 'b/' prefix (proper prefix, not chars).
+            path = _strip_diff_prefix(raw_path)
+
+            # Reject absolute paths — diffs should be relative to the repo root.
+            if posixpath.isabs(path):
+                return f"Patch references absolute path: {raw_path!r}"
+
+            # Normalize: collapses '.' and '..' components. After normalization,
+            # any leading '..' means the path escapes the repo root.
+            normalized = posixpath.normpath(path)
+            if normalized == ".." or normalized.startswith("../"):
+                return f"Patch contains path traversal: {raw_path!r} → {normalized!r}"
+
+            if normalized in seen:
+                continue
+            seen.add(normalized)
+
+            if normalized not in normalized_allowed:
                 return (
-                    f"Patch modifies '{modified}' which is not in the "
-                    f"Vulnerability Analysis allowed paths: {allowed_paths}"
+                    f"Patch modifies {normalized!r} which is not in the "
+                    f"Vulnerability Analysis allowed paths: {sorted(normalized_allowed)}"
                 )
 
         return None  # all good
