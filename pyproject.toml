@@ -1,0 +1,55 @@
+# =============================================================================
+# pyproject.toml
+# PURPOSE: Project-wide tool configuration (ruff, etc.).
+#          Phase 4 gate: every file passes `ruff check` with zero warnings.
+#          Enforced from day one — not retroactively.
+# =============================================================================
+
+[project]
+name = "ai-adversarial-agents"
+version = "0.1.0"
+description = "Adversarial cybersecurity sandbox — Red Team vs Blue Team agents"
+requires-python = ">=3.11"
+
+# -----------------------------------------------------------------------------
+# Ruff — linter + formatter (replaces flake8 + isort + black)
+# -----------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py311"
+line-length    = 100
+extend-exclude = [
+    ".chromadb",
+    "evaluation/traces",
+    "dummy_data/exploit_logs",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "SIM",  # flake8-simplify
+    "C4",   # flake8-comprehensions
+]
+ignore = [
+    "E501",  # line-too-long — handled by formatter
+    "B008",  # function call in default arg — used legitimately for dataclasses
+    "SIM117", # nested with statements — sometimes clearer than combined
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests use fixtures + magic constants — relax a few rules
+"tests/**/*.py" = ["B011", "E402"]
+# __init__.py files often re-export — allow unused imports
+"**/__init__.py" = ["F401"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["agents", "evaluation", "knowledge_base", "hypervisor", "targets"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
