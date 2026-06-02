@@ -6,26 +6,23 @@
 # RUN: pytest tests/unit/test_ollama_client.py -v
 # =============================================================================
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from agents.shared.ollama_client import (
-    OllamaClient,
-    ModelRole,
-    TaskType,
-    TokenUsage,
     TEMPERATURE_MAP,
     TOKEN_BUDGET_PER_ENGAGEMENT,
-    MODEL_MAP,
+    ModelRole,
+    OllamaClient,
+    TaskType,
+    TokenUsage,
 )
-
 
 # ---------------------------------------------------------------------------
 # Temperature Configuration
 # ---------------------------------------------------------------------------
 
-class TestTemperatureConfig:
 
+class TestTemperatureConfig:
     def test_patch_generation_has_lowest_temperature(self):
         """Patch generation must be most deterministic — lowest temp."""
         assert TEMPERATURE_MAP[TaskType.PATCH_GENERATION] <= 0.2
@@ -47,8 +44,8 @@ class TestTemperatureConfig:
 # Token Budget Tracking
 # ---------------------------------------------------------------------------
 
-class TestTokenUsage:
 
+class TestTokenUsage:
     def test_total_is_sum_of_prompt_and_completion(self):
         usage = TokenUsage(prompt_tokens=100, completion_tokens=50)
         assert usage.total == 150
@@ -57,9 +54,9 @@ class TestTokenUsage:
         a = TokenUsage(100, 50)
         b = TokenUsage(200, 75)
         c = a + b
-        assert c.prompt_tokens     == 300
+        assert c.prompt_tokens == 300
         assert c.completion_tokens == 125
-        assert c.total             == 425
+        assert c.total == 425
 
     def test_zero_usage(self):
         usage = TokenUsage()
@@ -70,8 +67,8 @@ class TestTokenUsage:
 # OllamaClient (mocked)
 # ---------------------------------------------------------------------------
 
-class TestOllamaClient:
 
+class TestOllamaClient:
     def test_verify_models_returns_true_when_all_present(self, mock_ollama_client):
         with patch("agents.shared.ollama_client.ollama.Client", return_value=mock_ollama_client):
             client = OllamaClient()
@@ -79,17 +76,22 @@ class TestOllamaClient:
 
     def test_verify_models_returns_false_when_missing(self):
         mock = MagicMock()
-        mock.list.return_value = {"models": []}  # no models available
+        mock.list.return_value = MagicMock(models=[])
         with patch("agents.shared.ollama_client.ollama.Client", return_value=mock):
             client = OllamaClient()
             assert client.verify_models_available() is False
 
+    def _make_chat_response(
+        self, content: str, prompt_tokens: int, completion_tokens: int
+    ) -> MagicMock:
+        resp = MagicMock()
+        resp.message.content = content
+        resp.prompt_eval_count = prompt_tokens
+        resp.eval_count = completion_tokens
+        return resp
+
     def test_chat_returns_string_and_token_usage(self, mock_ollama_client):
-        mock_ollama_client.chat.return_value = {
-            "message": {"content": "test response"},
-            "prompt_eval_count": 80,
-            "eval_count": 40,
-        }
+        mock_ollama_client.chat.return_value = self._make_chat_response("test response", 80, 40)
         with patch("agents.shared.ollama_client.ollama.Client", return_value=mock_ollama_client):
             client = OllamaClient()
             response, usage = client.chat(
@@ -101,26 +103,24 @@ class TestOllamaClient:
             assert usage.total == 120
 
     def test_cumulative_usage_accumulates(self, mock_ollama_client):
-        mock_ollama_client.chat.return_value = {
-            "message": {"content": "ok"},
-            "prompt_eval_count": 100,
-            "eval_count": 50,
-        }
+        mock_ollama_client.chat.return_value = self._make_chat_response("ok", 100, 50)
         with patch("agents.shared.ollama_client.ollama.Client", return_value=mock_ollama_client):
             client = OllamaClient()
-            client.chat(ModelRole.REASONING, TaskType.LOG_ANALYSIS, [{"role": "user", "content": "a"}])
-            client.chat(ModelRole.REASONING, TaskType.LOG_ANALYSIS, [{"role": "user", "content": "b"}])
+            client.chat(
+                ModelRole.REASONING, TaskType.LOG_ANALYSIS, [{"role": "user", "content": "a"}]
+            )
+            client.chat(
+                ModelRole.REASONING, TaskType.LOG_ANALYSIS, [{"role": "user", "content": "b"}]
+            )
             assert client.cumulative_usage.total == 300
 
     def test_reset_usage_clears_counter(self, mock_ollama_client):
-        mock_ollama_client.chat.return_value = {
-            "message": {"content": "ok"},
-            "prompt_eval_count": 100,
-            "eval_count": 50,
-        }
+        mock_ollama_client.chat.return_value = self._make_chat_response("ok", 100, 50)
         with patch("agents.shared.ollama_client.ollama.Client", return_value=mock_ollama_client):
             client = OllamaClient()
-            client.chat(ModelRole.REASONING, TaskType.LOG_ANALYSIS, [{"role": "user", "content": "a"}])
+            client.chat(
+                ModelRole.REASONING, TaskType.LOG_ANALYSIS, [{"role": "user", "content": "a"}]
+            )
             client.reset_usage()
             assert client.cumulative_usage.total == 0
 
@@ -129,6 +129,7 @@ class TestOllamaClient:
             client = OllamaClient()
             # Manually set cumulative usage over budget
             from agents.shared.ollama_client import TokenUsage
+
             client._cumulative_usage = TokenUsage(TOKEN_BUDGET_PER_ENGAGEMENT, 0)
             assert client.is_over_budget() is True
 

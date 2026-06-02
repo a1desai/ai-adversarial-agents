@@ -5,9 +5,10 @@
 # =============================================================================
 
 import json
-import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -20,6 +21,7 @@ DUMMY_DATA = Path(__file__).parent.parent / "dummy_data"
 # ---------------------------------------------------------------------------
 # Dummy Data Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def dummy_cve_records():
@@ -55,18 +57,21 @@ def dummy_payloads():
 # Mock Ollama (unit tests don't need a real GPU)
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def mock_ollama_response():
     """
-    Returns a factory for fake Ollama chat responses.
+    Returns a factory for fake Ollama chat responses (new SDK Pydantic format).
     Usage: mock_ollama_response("some response text")
     """
+
     def _factory(content: str = "OK", prompt_tokens: int = 100, completion_tokens: int = 50):
-        return {
-            "message": {"content": content},
-            "prompt_eval_count": prompt_tokens,
-            "eval_count": completion_tokens,
-        }
+        resp = MagicMock()
+        resp.message.content = content
+        resp.prompt_eval_count = prompt_tokens
+        resp.eval_count = completion_tokens
+        return resp
+
     return _factory
 
 
@@ -79,13 +84,13 @@ def mock_ollama_client(mock_ollama_response):
     with patch("agents.shared.ollama_client.ollama.Client") as mock_cls:
         mock_instance = MagicMock()
         mock_instance.chat.return_value = mock_ollama_response("OK")
-        mock_instance.list.return_value = {
-            "models": [
-                {"name": "llama3.1:8b-instruct-q4_K_M"},
-                {"name": "qwen2.5-coder:7b-instruct-q4_K_M"},
-                {"name": "nomic-embed-text"},
+        mock_instance.list.return_value = MagicMock(
+            models=[
+                MagicMock(model="llama3.1:8b-instruct-q4_K_M"),
+                MagicMock(model="qwen2.5-coder:7b-instruct-q4_K_M"),
+                MagicMock(model="nomic-embed-text"),
             ]
-        }
+        )
         mock_cls.return_value = mock_instance
         yield mock_instance
 
@@ -94,6 +99,7 @@ def mock_ollama_client(mock_ollama_response):
 # In-Memory ChromaDB (unit tests use ephemeral DB, not disk)
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def in_memory_chroma():
     """
@@ -101,6 +107,7 @@ def in_memory_chroma():
     Isolated — no data persists between tests.
     """
     import chromadb
+
     return chromadb.EphemeralClient()
 
 
@@ -114,6 +121,7 @@ def mock_embedding_function():
     __call__, name(), and is_legacy (used by ChromaDB's collection-config
     conflict checker).
     """
+
     class FakeEmbeddingFunction:
         is_legacy = False
 

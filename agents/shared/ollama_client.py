@@ -23,25 +23,26 @@
 #   Attack planning:         0.6  (creative lateral thinking about attack vectors)
 # =============================================================================
 
-import ollama
-from enum import Enum
 from dataclasses import dataclass
-from loguru import logger
+from enum import StrEnum
 
+import ollama
+from loguru import logger
 
 # ---------------------------------------------------------------------------
 # Model Roles
 # ---------------------------------------------------------------------------
 
-class ModelRole(str, Enum):
-    REASONING = "reasoning"   # strategic planning, log analysis, root cause
-    CODE_GEN  = "code_gen"    # exploit payloads, patch code
+
+class ModelRole(StrEnum):
+    REASONING = "reasoning"  # strategic planning, log analysis, root cause
+    CODE_GEN = "code_gen"  # exploit payloads, patch code
 
 
 # Model strings — change here only, never hardcode in agent files
 MODEL_MAP = {
     ModelRole.REASONING: "llama3.1:8b-instruct-q4_K_M",
-    ModelRole.CODE_GEN:  "qwen2.5-coder:7b-instruct-q4_K_M",
+    ModelRole.CODE_GEN: "qwen2.5-coder:7b-instruct-q4_K_M",
 }
 
 # Fallback: if VRAM is too constrained to load CODE_GEN, use REASONING for everything
@@ -52,39 +53,41 @@ FALLBACK_TO_REASONING = False  # set True in .env on constrained machines
 # Temperature Presets (per task type — do not change without PR + justification)
 # ---------------------------------------------------------------------------
 
-class TaskType(str, Enum):
-    PATCH_GENERATION    = "patch_generation"     # 0.1 — correctness critical
-    EXPLOIT_CODE        = "exploit_code"         # 0.2 — precision matters
-    ROOT_CAUSE          = "root_cause"           # 0.3 — analytical
-    LOG_ANALYSIS        = "log_analysis"         # 0.4 — interpretive
-    RECON_ANALYSIS      = "recon_analysis"       # 0.4 — interpretive
-    ATTACK_PLANNING     = "attack_planning"      # 0.6 — creative lateral thinking
+
+class TaskType(StrEnum):
+    PATCH_GENERATION = "patch_generation"  # 0.1 — correctness critical
+    EXPLOIT_CODE = "exploit_code"  # 0.2 — precision matters
+    ROOT_CAUSE = "root_cause"  # 0.3 — analytical
+    LOG_ANALYSIS = "log_analysis"  # 0.4 — interpretive
+    RECON_ANALYSIS = "recon_analysis"  # 0.4 — interpretive
+    ATTACK_PLANNING = "attack_planning"  # 0.6 — creative lateral thinking
     VULNERABILITY_ANALYSIS = "vulnerability_analysis"  # 0.3 — analytical
 
 
 TEMPERATURE_MAP = {
-    TaskType.PATCH_GENERATION:       0.1,
-    TaskType.EXPLOIT_CODE:           0.2,
-    TaskType.ROOT_CAUSE:             0.3,
+    TaskType.PATCH_GENERATION: 0.1,
+    TaskType.EXPLOIT_CODE: 0.2,
+    TaskType.ROOT_CAUSE: 0.3,
     TaskType.VULNERABILITY_ANALYSIS: 0.3,
-    TaskType.LOG_ANALYSIS:           0.4,
-    TaskType.RECON_ANALYSIS:         0.4,
-    TaskType.ATTACK_PLANNING:        0.6,
+    TaskType.LOG_ANALYSIS: 0.4,
+    TaskType.RECON_ANALYSIS: 0.4,
+    TaskType.ATTACK_PLANNING: 0.6,
 }
 
 # Fixed params — same for all tasks
-TOP_P          = 0.9
+TOP_P = 0.9
 REPEAT_PENALTY = 1.1
-MAX_TOKENS     = 2048  # per completion — Supervisor enforces 50K total per engagement
+MAX_TOKENS = 2048  # per completion — Supervisor enforces 50K total per engagement
 
 
 # ---------------------------------------------------------------------------
 # Token Budget Tracking
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class TokenUsage:
-    prompt_tokens:     int = 0
+    prompt_tokens: int = 0
     completion_tokens: int = 0
 
     @property
@@ -93,7 +96,7 @@ class TokenUsage:
 
     def __add__(self, other: "TokenUsage") -> "TokenUsage":
         return TokenUsage(
-            self.prompt_tokens     + other.prompt_tokens,
+            self.prompt_tokens + other.prompt_tokens,
             self.completion_tokens + other.completion_tokens,
         )
 
@@ -105,6 +108,7 @@ TOKEN_BUDGET_PER_ENGAGEMENT = 50_000
 # ---------------------------------------------------------------------------
 # Core Client
 # ---------------------------------------------------------------------------
+
 
 class OllamaClient:
     """
@@ -151,7 +155,7 @@ class OllamaClient:
         Raises:
             RuntimeError if Ollama is unreachable or model not found
         """
-        model      = self._resolve_model(role)
+        model = self._resolve_model(role)
         temperature = TEMPERATURE_MAP[task]
 
         # Prepend system prompt if provided
@@ -160,29 +164,31 @@ class OllamaClient:
             full_messages.append({"role": "system", "content": system_prompt})
         full_messages.extend(messages)
 
-        logger.debug(f"[ollama] model={model} task={task} temp={temperature} msgs={len(full_messages)}")
+        logger.debug(
+            f"[ollama] model={model} task={task} temp={temperature} msgs={len(full_messages)}"
+        )
 
         try:
             response = self._client.chat(
                 model=model,
                 messages=full_messages,
                 options={
-                    "temperature":    temperature,
-                    "top_p":          TOP_P,
+                    "temperature": temperature,
+                    "top_p": TOP_P,
                     "repeat_penalty": REPEAT_PENALTY,
-                    "num_predict":    MAX_TOKENS,
+                    "num_predict": MAX_TOKENS,
                 },
             )
         except Exception as e:
             logger.error(f"[ollama] Request failed: {e}")
             raise RuntimeError(f"Ollama request failed for model={model}: {e}") from e
 
-        content = response["message"]["content"]
+        content = response.message.content
 
         # Track token usage
         usage = TokenUsage(
-            prompt_tokens=response.get("prompt_eval_count", 0),
-            completion_tokens=response.get("eval_count", 0),
+            prompt_tokens=getattr(response, "prompt_eval_count", None) or 0,
+            completion_tokens=getattr(response, "eval_count", None) or 0,
         )
         self._cumulative_usage = self._cumulative_usage + usage
 
@@ -218,13 +224,13 @@ class OllamaClient:
         Call this at startup before running any agents.
         """
         try:
-            available = {m["name"] for m in self._client.list()["models"]}
+            available = {m.model for m in self._client.list().models}
         except Exception as e:
             logger.error(f"[ollama] Cannot connect to Ollama: {e}")
             return False
 
         required = set(MODEL_MAP.values())
-        missing  = required - available
+        missing = required - available
 
         if missing:
             logger.error(f"[ollama] Missing models: {missing}")
@@ -240,6 +246,7 @@ class OllamaClient:
 # ---------------------------------------------------------------------------
 
 _client_instance: OllamaClient | None = None
+
 
 def get_client() -> OllamaClient:
     """Returns the shared OllamaClient singleton."""
