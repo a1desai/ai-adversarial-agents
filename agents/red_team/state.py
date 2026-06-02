@@ -5,58 +5,58 @@
 #          Every agent reads from and writes to this shared state object.
 # =============================================================================
 
-from typing import TypedDict, Optional
-from enum import Enum
+from enum import StrEnum
+from typing import TypedDict
 
 
-class AttackPhase(str, Enum):
-    INIT          = "init"
-    RECON         = "recon"
-    EXPLOITATION  = "exploitation"
-    VERIFICATION  = "verification"
-    COMPLETE      = "complete"
-    FAILED        = "failed"
+class AttackPhase(StrEnum):
+    INIT = "init"
+    RECON = "recon"
+    EXPLOITATION = "exploitation"
+    VERIFICATION = "verification"
+    COMPLETE = "complete"
+    FAILED = "failed"
 
 
-class AttackOutcome(str, Enum):
-    SUCCESS  = "success"
-    FAILURE  = "failure"
-    PARTIAL  = "partial"
-    TIMEOUT  = "timeout"
+class AttackOutcome(StrEnum):
+    SUCCESS = "success"
+    FAILURE = "failure"
+    PARTIAL = "partial"
+    TIMEOUT = "timeout"
 
 
 class RedTeamState(TypedDict):
     # Target info
-    target_url:         str
-    target_cve:         Optional[str]       # set after CVE is identified
+    target_url: str
+    target_cve: str | None  # set after CVE is identified
 
     # Engagement tracking
-    trace_id:           str                 # UUID — set by supervisor at start
-    phase:              AttackPhase
-    step_count:         int                 # hard cap: 30
-    token_count:        int                 # hard cap: 50,000
-    retry_count:        int                 # hard cap: 3
-    elapsed_seconds:    float               # hard cap: 900 (15 min)
+    trace_id: str  # UUID — set by supervisor at start
+    phase: AttackPhase
+    step_count: int  # hard cap: 30
+    token_count: int  # hard cap: 50,000
+    retry_count: int  # hard cap: 3
+    elapsed_seconds: float  # hard cap: 900 (15 min)
 
     # Recon output (filled by ReconAgent)
-    recon_summary:      Optional[dict]      # structured: {ports, services, technologies}
+    recon_summary: dict | None  # structured: {ports, services, technologies}
 
     # Exploitation (filled by ExploitationAgent)
-    cve_matches:        list[dict]          # CVEs retrieved from memory
-    attack_plan:        Optional[dict]      # proposed attack strategy
-    payload_used:       Optional[str]       # exact payload/command sequence
-    server_response:    Optional[str]       # truncated server response
-    exploit_claimed_success: Optional[bool] # ExploitationAgent's self-report
-                                            # — supervisor uses this to route to
-                                            # verification; grader confirms it
+    cve_matches: list[dict]  # CVEs retrieved from memory
+    attack_plan: dict | None  # proposed attack strategy
+    payload_used: str | None  # exact payload/command sequence
+    server_response: str | None  # truncated server response
+    exploit_claimed_success: bool | None  # ExploitationAgent's self-report
+    # — supervisor uses this to route to
+    # verification; grader confirms it
 
     # Verification (filled by VerificationAgent)
-    grader_confirmed:   bool                # True only if CVE-Bench grader confirms
-    attack_goals_achieved: list[str]        # e.g. ["remote_code_execution"]
+    grader_confirmed: bool  # True only if CVE-Bench grader confirms
+    attack_goals_achieved: list[str]  # e.g. ["remote_code_execution"]
 
     # Final result
-    outcome:            Optional[AttackOutcome]
-    failure_reason:     Optional[str]
+    outcome: AttackOutcome | None
+    failure_reason: str | None
 
     # Supervisor internal
-    supervisor_notes:   list[str]           # routing decisions log
+    supervisor_notes: list[str]  # routing decisions log

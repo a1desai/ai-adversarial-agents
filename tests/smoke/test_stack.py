@@ -7,17 +7,18 @@
 # RUN: pytest tests/smoke/ -m smoke -v
 # =============================================================================
 
-import pytest
 import subprocess
+
+import pytest
 
 pytestmark = pytest.mark.smoke
 
 
 class TestOllamaConnectivity:
-
     def test_ollama_is_reachable(self):
         """Ollama must be running on localhost:11434."""
         import httpx
+
         try:
             response = httpx.get("http://localhost:11434/api/tags", timeout=5)
             assert response.status_code == 200, "Ollama returned non-200"
@@ -27,6 +28,7 @@ class TestOllamaConnectivity:
     def test_required_models_are_pulled(self):
         """All three required models must be available in Ollama."""
         from agents.shared.ollama_client import get_client
+
         client = get_client()
         assert client.verify_models_available(), (
             "One or more models missing. Run:\n"
@@ -37,7 +39,8 @@ class TestOllamaConnectivity:
 
     def test_ollama_returns_valid_response(self):
         """Smoke test: send a minimal prompt, expect a response."""
-        from agents.shared.ollama_client import get_client, ModelRole, TaskType
+        from agents.shared.ollama_client import ModelRole, TaskType, get_client
+
         client = get_client()
         response, usage = client.chat(
             role=ModelRole.REASONING,
@@ -49,24 +52,24 @@ class TestOllamaConnectivity:
 
 
 class TestChromaDBConnectivity:
-
     def test_chromadb_initializes(self):
         """ChromaDB must initialize all 6 collections without error."""
-        from agents.shared.memory import initialize_all_collections, ALL_COLLECTIONS
+        from agents.shared.memory import ALL_COLLECTIONS, initialize_all_collections
+
         collections = initialize_all_collections()
         assert len(collections) == len(ALL_COLLECTIONS)
 
     def test_chromadb_write_and_read(self):
         """Can write a record and retrieve it."""
-        from agents.shared.memory import get_collection, CVE_KNOWLEDGE
+        from agents.shared.memory import CVE_KNOWLEDGE, get_collection
+
         col = get_collection(CVE_KNOWLEDGE)
         test_id = "smoke-test-cve-0001"
 
         # Clean up if leftover from previous run
-        try:
+        import contextlib
+        with contextlib.suppress(Exception):
             col.delete(ids=[test_id])
-        except Exception:
-            pass
 
         col.add(
             ids=[test_id],
@@ -81,7 +84,6 @@ class TestChromaDBConnectivity:
 
 
 class TestDockerConnectivity:
-
     def test_docker_is_running(self):
         """Docker must be accessible."""
         result = subprocess.run(["docker", "ps"], capture_output=True, text=True)
@@ -90,8 +92,17 @@ class TestDockerConnectivity:
     def test_target_network_exists(self):
         """sandbox_targets network must exist."""
         result = subprocess.run(
-            ["docker", "network", "ls", "--filter", "name=sandbox_targets", "--format", "{{.Name}}"],
-            capture_output=True, text=True,
+            [
+                "docker",
+                "network",
+                "ls",
+                "--filter",
+                "name=sandbox_targets",
+                "--format",
+                "{{.Name}}",
+            ],
+            capture_output=True,
+            text=True,
         )
         assert "sandbox_targets" in result.stdout, (
             "sandbox_targets network not found. Run: docker-compose up"
@@ -101,7 +112,8 @@ class TestDockerConnectivity:
         """DVWA target container must be running for Phase 1 testing."""
         result = subprocess.run(
             ["docker", "ps", "--filter", "name=target_dvwa", "--format", "{{.Names}}"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         assert "target_dvwa" in result.stdout, (
             "DVWA container not running. Run: docker-compose -f docker-compose.targets.yml up -d"

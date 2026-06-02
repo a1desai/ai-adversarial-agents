@@ -10,13 +10,13 @@
 #       If replay fails, the original result is invalidated.
 # =============================================================================
 
-import uuid
 import json
-from datetime import datetime, timezone
+import uuid
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from pathlib import Path
-from dataclasses import dataclass, field, asdict
-from loguru import logger
 
+from loguru import logger
 
 TRACES_DIR = Path(__file__).parent / "traces"
 TRACES_DIR.mkdir(exist_ok=True)
@@ -24,13 +24,13 @@ TRACES_DIR.mkdir(exist_ok=True)
 
 @dataclass
 class TraceEvent:
-    trace_id:   str
-    timestamp:  str
-    team:       str           # "red" or "blue"
-    agent:      str           # e.g. "exploitation_agent"
-    action:     str           # e.g. "payload_executed"
-    input:      dict
-    output:     dict
+    trace_id: str
+    timestamp: str
+    team: str  # "red" or "blue"
+    agent: str  # e.g. "exploitation_agent"
+    action: str  # e.g. "payload_executed"
+    input: dict
+    output: dict
     tokens_used: int
     step_number: int
 
@@ -42,34 +42,34 @@ class TraceLogger:
     """
 
     def __init__(self, team: str, target_cve: str):
-        self.trace_id  = str(uuid.uuid4())
-        self.team      = team
+        self.trace_id = str(uuid.uuid4())
+        self.team = team
         self.target_cve = target_cve
-        self.events:   list[TraceEvent] = []
-        self._step     = 0
-        self._path     = TRACES_DIR / f"{self.trace_id}.jsonl"
+        self.events: list[TraceEvent] = []
+        self._step = 0
+        self._path = TRACES_DIR / f"{self.trace_id}.jsonl"
         logger.info(f"[trace] New engagement: trace_id={self.trace_id} cve={target_cve}")
 
     def log(
         self,
-        agent:       str,
-        action:      str,
-        input_data:  dict,
+        agent: str,
+        action: str,
+        input_data: dict,
         output_data: dict,
         tokens_used: int = 0,
     ):
         """Records a single agent action. Call this after every agent step."""
         self._step += 1
         event = TraceEvent(
-            trace_id    = self.trace_id,
-            timestamp   = datetime.now(timezone.utc).isoformat(),
-            team        = self.team,
-            agent       = agent,
-            action      = action,
-            input       = input_data,
-            output      = output_data,
-            tokens_used = tokens_used,
-            step_number = self._step,
+            trace_id=self.trace_id,
+            timestamp=datetime.now(UTC).isoformat(),
+            team=self.team,
+            agent=agent,
+            action=action,
+            input=input_data,
+            output=output_data,
+            tokens_used=tokens_used,
+            step_number=self._step,
         )
         self.events.append(event)
 
@@ -82,13 +82,13 @@ class TraceLogger:
         Writes a final summary record. Call at end of engagement.
         """
         summary = {
-            "trace_id":    self.trace_id,
-            "team":        self.team,
-            "target_cve":  self.target_cve,
-            "outcome":     outcome,
+            "trace_id": self.trace_id,
+            "team": self.team,
+            "target_cve": self.target_cve,
+            "outcome": outcome,
             "total_steps": self._step,
             "total_tokens": sum(e.tokens_used for e in self.events),
-            "notes":       notes,
+            "notes": notes,
             "events_file": str(self._path),
         }
         summary_path = TRACES_DIR / f"{self.trace_id}_summary.json"

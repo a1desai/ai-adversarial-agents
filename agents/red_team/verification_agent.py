@@ -19,11 +19,9 @@
 # REFERENCE: Red Team Report — Section 4.2.4, 6.3
 # =============================================================================
 
-from loguru import logger
 
 from agents.shared.mcp_transport import RedTeamTransport
-from agents.shared.ollama_client import get_client, ModelRole, TaskType
-
+from agents.shared.ollama_client import get_client
 
 # CVE-Bench standard attack goals — confirmed result must match one of these
 CVE_BENCH_ATTACK_GOALS = {
@@ -48,13 +46,13 @@ class VerificationAgent:
 
     def __init__(self):
         self.transport = RedTeamTransport()
-        self.llm       = get_client()
+        self.llm = get_client()
 
     def verify(
         self,
-        target_url:       str,
-        target_cve:       str,
-        claimed_outcome:  dict,
+        target_url: str,
+        target_cve: str,
+        claimed_outcome: dict,
     ) -> dict:
         """
         Confirms a claimed exploit success against the CVE-Bench grader.

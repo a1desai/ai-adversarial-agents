@@ -9,37 +9,37 @@
 
 from langgraph.graph import END
 
-from agents.red_team.state import AttackPhase, AttackOutcome
+from agents.red_team.state import AttackOutcome, AttackPhase
 from agents.red_team.supervisor import (
-    supervisor_route,
+    MAX_RETRIES,
     MAX_STEPS,
     MAX_TOKENS,
-    MAX_RETRIES,
+    supervisor_route,
 )
 
 
 def _base_state(**overrides) -> dict:
     """Minimal RedTeamState — overrides only what each test needs."""
     state = {
-        "target_url":              "http://localhost:8080",
-        "target_cve":              None,
-        "trace_id":                "test-trace-id",
-        "phase":                   AttackPhase.INIT,
-        "step_count":              0,
-        "token_count":             0,
-        "retry_count":             0,
-        "elapsed_seconds":         0.0,
-        "recon_summary":           None,
-        "cve_matches":             [],
-        "attack_plan":             None,
-        "payload_used":            None,
-        "server_response":         None,
+        "target_url": "http://localhost:8080",
+        "target_cve": None,
+        "trace_id": "test-trace-id",
+        "phase": AttackPhase.INIT,
+        "step_count": 0,
+        "token_count": 0,
+        "retry_count": 0,
+        "elapsed_seconds": 0.0,
+        "recon_summary": None,
+        "cve_matches": [],
+        "attack_plan": None,
+        "payload_used": None,
+        "server_response": None,
         "exploit_claimed_success": None,
-        "grader_confirmed":        False,
-        "attack_goals_achieved":   [],
-        "outcome":                 None,
-        "failure_reason":          None,
-        "supervisor_notes":        [],
+        "grader_confirmed": False,
+        "attack_goals_achieved": [],
+        "outcome": None,
+        "failure_reason": None,
+        "supervisor_notes": [],
     }
     state.update(overrides)
     return state
@@ -49,8 +49,8 @@ def _base_state(**overrides) -> dict:
 # Hard caps (must run BEFORE any phase routing)
 # ---------------------------------------------------------------------------
 
-class TestHardCaps:
 
+class TestHardCaps:
     def test_max_steps_terminates(self):
         state = _base_state(step_count=MAX_STEPS, phase=AttackPhase.RECON)
         assert supervisor_route(state) == END
@@ -71,8 +71,8 @@ class TestHardCaps:
 # Phase routing — INIT and RECON
 # ---------------------------------------------------------------------------
 
-class TestPhaseRoutingInitRecon:
 
+class TestPhaseRoutingInitRecon:
     def test_init_routes_to_recon(self):
         state = _base_state(phase=AttackPhase.INIT)
         assert supervisor_route(state) == "recon_node"
@@ -99,14 +99,15 @@ class TestPhaseRoutingInitRecon:
 # Phase routing — EXPLOITATION (the bug we're fixing)
 # ---------------------------------------------------------------------------
 
+
 class TestExploitationRouting:
     """The original bug: this branch always returned 'exploitation_node'."""
 
     def _exploit_state(self, **overrides) -> dict:
         defaults = {
-            "phase":          AttackPhase.EXPLOITATION,
-            "recon_summary":  {"ports": [{"port": "80/tcp", "service": "http"}]},
-            "attack_plan":    {"target_service": "http", "technique": "sqli"},
+            "phase": AttackPhase.EXPLOITATION,
+            "recon_summary": {"ports": [{"port": "80/tcp", "service": "http"}]},
+            "attack_plan": {"target_service": "http", "technique": "sqli"},
         }
         defaults.update(overrides)
         return _base_state(**defaults)
@@ -140,13 +141,13 @@ class TestExploitationRouting:
 # Phase routing — VERIFICATION
 # ---------------------------------------------------------------------------
 
-class TestVerificationRouting:
 
+class TestVerificationRouting:
     def test_grader_confirmed_marks_complete(self):
         state = _base_state(phase=AttackPhase.VERIFICATION, grader_confirmed=True)
         assert supervisor_route(state) == END
         assert state["outcome"] == AttackOutcome.SUCCESS
-        assert state["phase"]   == AttackPhase.COMPLETE
+        assert state["phase"] == AttackPhase.COMPLETE
 
     def test_grader_rejected_marks_failed(self):
         """Verification rejecting a claimed success → ungrounded → FAILURE."""
@@ -160,8 +161,8 @@ class TestVerificationRouting:
 # Terminal phases
 # ---------------------------------------------------------------------------
 
-class TestTerminalPhases:
 
+class TestTerminalPhases:
     def test_complete_phase_returns_end(self):
         state = _base_state(phase=AttackPhase.COMPLETE)
         assert supervisor_route(state) == END

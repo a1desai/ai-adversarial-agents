@@ -7,16 +7,14 @@
 # =============================================================================
 
 import json
-import pytest
-import tempfile
-from pathlib import Path
 from unittest.mock import patch
 
-from evaluation.trace_logger import TraceLogger, load_trace, list_traces
+import pytest
+
+from evaluation.trace_logger import TraceLogger, load_trace
 
 
 class TestTraceLogger:
-
     @pytest.fixture
     def temp_traces_dir(self, tmp_path):
         """Use a temp directory for traces so tests don't pollute evaluation/traces/."""
@@ -55,7 +53,7 @@ class TestTraceLogger:
     def test_finalize_writes_summary(self, temp_traces_dir):
         logger = TraceLogger(team="blue", target_cve="CVE-2024-1002")
         logger.log("patch_agent", "patch_deployed", {}, {"result": "success"})
-        summary = logger.finalize(outcome="SUCCESS", notes="patch blocked exploit")
+        logger.finalize(outcome="SUCCESS", notes="patch blocked exploit")
 
         summary_file = temp_traces_dir / f"{logger.trace_id}_summary.json"
         assert summary_file.exists()

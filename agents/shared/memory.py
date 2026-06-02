@@ -24,11 +24,12 @@
 #   30% memory retrieval | 30% current recon/evidence | 40% reasoning
 # =============================================================================
 
+from pathlib import Path
+
 import chromadb
 from chromadb.config import Settings
 from chromadb.utils import embedding_functions
 from loguru import logger
-from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -39,12 +40,12 @@ EMBEDDING_MODEL = "nomic-embed-text"  # served via Ollama — DO NOT CHANGE
 OLLAMA_BASE_URL = "http://localhost:11434"
 
 # Collection names — treat as constants, never hardcode strings elsewhere
-CVE_KNOWLEDGE      = "cve_knowledge"
-RED_EPISODIC       = "red_episodic"
-RED_PROCEDURAL     = "red_procedural"
-PATCH_KNOWLEDGE    = "patch_knowledge"
-BLUE_EPISODIC      = "blue_episodic"
-BLUE_PROCEDURAL    = "blue_procedural"
+CVE_KNOWLEDGE = "cve_knowledge"
+RED_EPISODIC = "red_episodic"
+RED_PROCEDURAL = "red_procedural"
+PATCH_KNOWLEDGE = "patch_knowledge"
+BLUE_EPISODIC = "blue_episodic"
+BLUE_PROCEDURAL = "blue_procedural"
 
 ALL_COLLECTIONS = [
     CVE_KNOWLEDGE,
@@ -59,6 +60,7 @@ ALL_COLLECTIONS = [
 # ---------------------------------------------------------------------------
 # Embedding Function (nomic-embed-text via Ollama)
 # ---------------------------------------------------------------------------
+
 
 def get_embedding_function():
     """
@@ -75,6 +77,7 @@ def get_embedding_function():
 # Client Initialization
 # ---------------------------------------------------------------------------
 
+
 def get_client() -> chromadb.PersistentClient:
     """
     Returns a persistent ChromaDB client stored at DB_PATH.
@@ -90,6 +93,7 @@ def get_client() -> chromadb.PersistentClient:
 # ---------------------------------------------------------------------------
 # Collection Accessors
 # ---------------------------------------------------------------------------
+
 
 def get_collection(name: str) -> chromadb.Collection:
     """
@@ -114,6 +118,7 @@ def get_collection(name: str) -> chromadb.Collection:
 # ---------------------------------------------------------------------------
 # Initialization (run once at startup)
 # ---------------------------------------------------------------------------
+
 
 def initialize_all_collections() -> dict[str, chromadb.Collection]:
     """
@@ -169,6 +174,7 @@ def initialize_all_collections() -> dict[str, chromadb.Collection]:
 # Retrieval Helpers
 # ---------------------------------------------------------------------------
 
+
 def query_collection(
     collection_name: str,
     query_text: str,
@@ -202,12 +208,14 @@ def query_collection(
 
     formatted = []
     for i in range(len(results["ids"][0])):
-        formatted.append({
-            "id":       results["ids"][0][i],
-            "document": results["documents"][0][i],
-            "metadata": results["metadatas"][0][i],
-            "distance": results["distances"][0][i],
-        })
+        formatted.append(
+            {
+                "id": results["ids"][0][i],
+                "document": results["documents"][0][i],
+                "metadata": results["metadatas"][0][i],
+                "distance": results["distances"][0][i],
+            }
+        )
 
     return formatted
 
@@ -243,17 +251,17 @@ def parallel_retrieval(
 
     if team == "red":
         procedural_col = RED_PROCEDURAL
-        episodic_col   = RED_EPISODIC
-        knowledge_col  = CVE_KNOWLEDGE
+        episodic_col = RED_EPISODIC
+        knowledge_col = CVE_KNOWLEDGE
     else:
         procedural_col = BLUE_PROCEDURAL
-        episodic_col   = BLUE_EPISODIC
-        knowledge_col  = PATCH_KNOWLEDGE
+        episodic_col = BLUE_EPISODIC
+        knowledge_col = PATCH_KNOWLEDGE
 
     return {
         "procedural": query_collection(procedural_col, query_text, n_results_each, metadata_filter),
-        "episodic":   query_collection(episodic_col,   query_text, n_results_each, metadata_filter),
-        "knowledge":  query_collection(knowledge_col,  query_text, n_results_each, metadata_filter),
+        "episodic": query_collection(episodic_col, query_text, n_results_each, metadata_filter),
+        "knowledge": query_collection(knowledge_col, query_text, n_results_each, metadata_filter),
     }
 
 

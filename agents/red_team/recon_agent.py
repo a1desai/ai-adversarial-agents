@@ -22,10 +22,11 @@
 
 import argparse
 import json
+
 from loguru import logger
 
 from agents.shared.mcp_transport import RedTeamTransport
-from agents.shared.ollama_client import get_client, ModelRole, TaskType
+from agents.shared.ollama_client import get_client
 
 
 class ReconAgent:
@@ -38,7 +39,7 @@ class ReconAgent:
 
     def __init__(self):
         self.transport = RedTeamTransport()
-        self.llm       = get_client()
+        self.llm = get_client()
 
     def run(self, target_url: str) -> dict:
         """
@@ -85,7 +86,13 @@ class ReconAgent:
         Validates that the recon output matches the required schema.
         Returns True if valid, raises ValueError if not.
         """
-        required_keys = ["ports", "technologies", "directories", "potential_entry_points", "confidence"]
+        required_keys = [
+            "ports",
+            "technologies",
+            "directories",
+            "potential_entry_points",
+            "confidence",
+        ]
         for key in required_keys:
             if key not in output:
                 raise ValueError(f"Recon output missing required key: '{key}'")

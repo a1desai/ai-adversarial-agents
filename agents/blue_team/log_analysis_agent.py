@@ -22,10 +22,9 @@
 # REFERENCE: Blue Team Report — Section 4.2.2, 4.5
 # =============================================================================
 
-from loguru import logger
 
 from agents.shared.mcp_transport import BlueTeamTransport
-from agents.shared.ollama_client import get_client, ModelRole, TaskType
+from agents.shared.ollama_client import get_client
 
 
 class LogAnalysisAgent:
@@ -38,12 +37,12 @@ class LogAnalysisAgent:
 
     def __init__(self):
         self.transport = BlueTeamTransport()
-        self.llm       = get_client()
+        self.llm = get_client()
 
     def analyze(
         self,
-        container_id:        str,
-        exploit_timestamp:   str,
+        container_id: str,
+        exploit_timestamp: str,
         time_window_seconds: int = 300,
     ) -> dict:
         """

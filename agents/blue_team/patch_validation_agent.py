@@ -21,7 +21,6 @@
 # REFERENCE: Blue Team Report — Section 4.2.5, 6.1, 6.3
 # =============================================================================
 
-from loguru import logger
 
 from agents.shared.mcp_transport import BlueTeamTransport
 
@@ -40,11 +39,11 @@ class PatchValidationAgent:
 
     def validate(
         self,
-        container_id:           str,
-        patch_diff:             str,
-        allowed_patch_paths:    list[str],
-        functional_health_url:  str,
-        exploit_replay_trace:   str,
+        container_id: str,
+        patch_diff: str,
+        allowed_patch_paths: list[str],
+        functional_health_url: str,
+        exploit_replay_trace: str,
     ) -> dict:
         """
         Runs the three-stage validation protocol.

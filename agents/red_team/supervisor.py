@@ -17,18 +17,15 @@
 # REFERENCE: Red Team Report — Section 4.2.1 and 4.3
 # =============================================================================
 
-import uuid
-import time
-from langgraph.graph import StateGraph, END
+from langgraph.graph import END, StateGraph
 from loguru import logger
 
-from agents.red_team.state import RedTeamState, AttackPhase, AttackOutcome
-from agents.shared.ollama_client import get_client
+from agents.red_team.state import AttackOutcome, AttackPhase, RedTeamState
 
 # Hard caps — DO NOT change without lead approval
-MAX_STEPS   = 30
-MAX_TOKENS  = 50_000
-MAX_SECONDS = 900   # 15 minutes
+MAX_STEPS = 30
+MAX_TOKENS = 50_000
+MAX_SECONDS = 900  # 15 minutes
 MAX_RETRIES = 3
 
 
@@ -42,7 +39,6 @@ def create_red_team_graph() -> StateGraph:
         Entry:  init_node
     """
     # TODO (Red Team Hire): implement full graph
-    graph = StateGraph(RedTeamState)
     raise NotImplementedError("Red Team graph not yet implemented — see TODO above")
 
 
@@ -83,7 +79,7 @@ def supervisor_route(state: RedTeamState) -> str:
         # service is rejected and a retry is scheduled. This increments
         # retry_count inside _validate_attack_plan().
         if not _validate_attack_plan(state):
-            return "exploitation_node"   # retry with updated memory
+            return "exploitation_node"  # retry with updated memory
 
         # ExploitationAgent's self-report drives routing:
         #   True  → hand off to VerificationAgent (independent grader check)
@@ -100,12 +96,12 @@ def supervisor_route(state: RedTeamState) -> str:
         # Verification has run — grader_confirmed is now authoritative.
         if state.get("grader_confirmed"):
             state["outcome"] = AttackOutcome.SUCCESS
-            state["phase"]   = AttackPhase.COMPLETE
+            state["phase"] = AttackPhase.COMPLETE
         else:
             # Verification rejected a claimed success → treat as ungrounded.
-            state["outcome"]        = AttackOutcome.FAILURE
+            state["outcome"] = AttackOutcome.FAILURE
             state["failure_reason"] = "Verification rejected claimed exploit"
-            state["phase"]          = AttackPhase.FAILED
+            state["phase"] = AttackPhase.FAILED
         return END
 
     if phase in (AttackPhase.COMPLETE, AttackPhase.FAILED):
@@ -116,9 +112,11 @@ def supervisor_route(state: RedTeamState) -> str:
 
 def _terminate(state: RedTeamState, outcome: AttackOutcome, reason: str) -> str:
     """Marks the engagement as terminated and returns END."""
-    state["outcome"]       = outcome
+    state["outcome"] = outcome
     state["failure_reason"] = reason
-    state["phase"]         = AttackPhase.FAILED if outcome != AttackOutcome.SUCCESS else AttackPhase.COMPLETE
+    state["phase"] = (
+        AttackPhase.FAILED if outcome != AttackOutcome.SUCCESS else AttackPhase.COMPLETE
+    )
     state["supervisor_notes"].append(f"TERMINATED: {reason}")
     return END
 
@@ -135,8 +133,7 @@ def _validate_attack_plan(state: RedTeamState) -> bool:
         return False
 
     discovered_services = {
-        p.get("service", "").lower()
-        for p in state.get("recon_summary", {}).get("ports", [])
+        p.get("service", "").lower() for p in state.get("recon_summary", {}).get("ports", [])
     }
 
     target_service = plan.get("target_service", "").lower()
@@ -145,9 +142,7 @@ def _validate_attack_plan(state: RedTeamState) -> bool:
             f"[red/supervisor] Plan rejected: targets '{target_service}' "
             f"not in discovered services {discovered_services}"
         )
-        state["supervisor_notes"].append(
-            f"Plan rejected: '{target_service}' not in recon output"
-        )
+        state["supervisor_notes"].append(f"Plan rejected: '{target_service}' not in recon output")
         state["retry_count"] += 1
         return False
 

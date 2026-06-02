@@ -6,8 +6,8 @@
 # =============================================================================
 
 import json
-import sys
 from pathlib import Path
+
 from loguru import logger
 
 DUMMY_DATA = Path(__file__).parent
@@ -18,7 +18,7 @@ def load_cve_records_into_chromadb():
     Loads the 5 dummy CVE records into both cve_knowledge and patch_knowledge
     collections. Use this for local dev when you don't want to hit the NVD API.
     """
-    from agents.shared.memory import get_collection, CVE_KNOWLEDGE, PATCH_KNOWLEDGE
+    from agents.shared.memory import CVE_KNOWLEDGE, PATCH_KNOWLEDGE, get_collection
 
     with open(DUMMY_DATA / "cve_records" / "cve_records.json") as f:
         records = json.load(f)
@@ -46,13 +46,16 @@ def load_cve_records_into_chromadb():
                 f"Patch: {r['patch_summary']}"
                 for r in new_records
             ],
-            metadatas=[{
-                "cve_id":              r["cve_id"],
-                "cvss_score":          r["cvss_score"],
-                "cwe_ids":             ",".join(r["cwe_ids"]),
-                "affected_technology": r["affected_technology"],
-                "published_date":      r["published_date"],
-            } for r in new_records],
+            metadatas=[
+                {
+                    "cve_id": r["cve_id"],
+                    "cvss_score": r["cvss_score"],
+                    "cwe_ids": ",".join(r["cwe_ids"]),
+                    "affected_technology": r["affected_technology"],
+                    "published_date": r["published_date"],
+                }
+                for r in new_records
+            ],
         )
         logger.info(f"[loader] {collection_name}: loaded {len(new_records)} dummy CVE records")
 

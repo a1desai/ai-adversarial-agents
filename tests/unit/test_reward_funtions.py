@@ -6,26 +6,34 @@
 # RUN: pytest tests/unit/test_reward_functions.py -v
 # =============================================================================
 
-import pytest
 
-from evaluation.reward_red import (
-    compute_red_reward,
-    RedTeamRunMetrics,
-    W_ESR, W_TTE, W_DIVERSITY, W_EFFICIENCY, W_ADAPTATION, W_GROUNDING,
+from evaluation.reward_blue import (
+    W_EFFICIENCY as BW_EFFICIENCY,
 )
 from evaluation.reward_blue import (
-    compute_blue_reward,
+    W_FUNCTIONAL,
+    W_MINIMALITY,
+    W_PSR,
+    W_TTP,
     BlueTeamRunMetrics,
-    W_PSR, W_MINIMALITY, W_TTP, W_FUNCTIONAL, W_EFFICIENCY as BW_EFFICIENCY, W_GROUNDING as BW_GROUNDING,
+    compute_blue_reward,
 )
-
+from evaluation.reward_red import (
+    W_ADAPTATION,
+    W_DIVERSITY,
+    W_EFFICIENCY,
+    W_ESR,
+    W_TTE,
+    RedTeamRunMetrics,
+    compute_red_reward,
+)
 
 # ---------------------------------------------------------------------------
 # Red Team Reward
 # ---------------------------------------------------------------------------
 
-class TestRedTeamReward:
 
+class TestRedTeamReward:
     def _perfect_metrics(self) -> RedTeamRunMetrics:
         """A run where the agent did everything perfectly."""
         return RedTeamRunMetrics(
@@ -59,7 +67,9 @@ class TestRedTeamReward:
     def test_weights_sum_correctly(self):
         """Weights must sum to 1.0 (grounding is subtracted, not added)."""
         positive_weights = W_ESR + W_TTE + W_DIVERSITY + W_EFFICIENCY + W_ADAPTATION
-        assert abs(positive_weights - 1.0) < 0.01, f"Weights sum to {positive_weights}, expected 1.0"
+        assert abs(positive_weights - 1.0) < 0.01, (
+            f"Weights sum to {positive_weights}, expected 1.0"
+        )
 
     def test_perfect_run_has_high_composite(self):
         result = compute_red_reward(self._perfect_metrics())
@@ -115,8 +125,8 @@ class TestRedTeamReward:
 # Blue Team Reward
 # ---------------------------------------------------------------------------
 
-class TestBlueTeamReward:
 
+class TestBlueTeamReward:
     def _perfect_metrics(self) -> BlueTeamRunMetrics:
         return BlueTeamRunMetrics(
             successful_patches=5,

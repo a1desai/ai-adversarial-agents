@@ -27,11 +27,9 @@
 # REFERENCE: Blue Team Report — Section 4.2.3, 7.3
 # =============================================================================
 
-from loguru import logger
 
-from agents.shared.memory import parallel_retrieval, get_collection, PATCH_KNOWLEDGE
 from agents.shared.mcp_transport import BlueTeamTransport
-from agents.shared.ollama_client import get_client, ModelRole, TaskType
+from agents.shared.ollama_client import get_client
 
 
 class RootCauseAgent:
@@ -44,13 +42,13 @@ class RootCauseAgent:
 
     def __init__(self):
         self.transport = BlueTeamTransport()
-        self.llm       = get_client()
+        self.llm = get_client()
 
     def analyze(
         self,
-        attack_summary:     dict,
-        container_id:       str,
-        candidate_files:    list[str] | None = None,
+        attack_summary: dict,
+        container_id: str,
+        candidate_files: list[str] | None = None,
     ) -> dict:
         """
         Identifies the vulnerable code path that produced the observed attack.

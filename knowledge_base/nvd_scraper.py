@@ -20,26 +20,24 @@
 # =============================================================================
 
 import argparse
-import time
+
 from loguru import logger
 
 # nvdlib wraps the NVD API — free, no key needed
 # pip install nvdlib
 try:
-    import nvdlib
-except ImportError:
-    raise ImportError("Run: pip install nvdlib")
+    import nvdlib  # noqa: F401
+except ImportError as err:
+    raise ImportError("Run: pip install nvdlib") from err
 
-from agents.shared.memory import get_collection, CVE_KNOWLEDGE, PATCH_KNOWLEDGE
-from agents.shared.ollama_client import get_client, ModelRole, TaskType
-
+from agents.shared.memory import CVE_KNOWLEDGE
 
 # CWE IDs we care about (web application vulnerability classes)
 TARGET_CWE_IDS = {
-    "CWE-89",   # SQL Injection
-    "CWE-79",   # XSS
-    "CWE-22",   # Path Traversal
-    "CWE-78",   # OS Command Injection
+    "CWE-89",  # SQL Injection
+    "CWE-79",  # XSS
+    "CWE-22",  # Path Traversal
+    "CWE-78",  # OS Command Injection
     "CWE-287",  # Authentication Issues
     "CWE-285",  # Authorization Issues
     "CWE-434",  # Unrestricted File Upload
@@ -111,8 +109,7 @@ def ingest_to_chromadb(cve_chunks: list[dict], collection_name: str = CVE_KNOWLE
                          CVE_KNOWLEDGE for Red Team
                          PATCH_KNOWLEDGE for Blue Team (ingest separately)
     """
-    collection = get_collection(collection_name)
-
+    # TODO: collection = get_collection(collection_name)
     # TODO: batch insert into ChromaDB
     # collection.add(
     #     ids=[chunk["id"] for chunk in cve_chunks],
@@ -130,14 +127,16 @@ def ingest_to_chromadb(cve_chunks: list[dict], collection_name: str = CVE_KNOWLE
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="NVD CVE Scraper")
-    parser.add_argument("--limit",    type=int,   default=100, help="Max CVEs to fetch")
+    parser.add_argument("--limit", type=int, default=100, help="Max CVEs to fetch")
     parser.add_argument("--min-cvss", type=float, default=9.0, help="Min CVSS score")
     args = parser.parse_args()
 
-    cves   = fetch_cves(limit=args.limit, min_cvss=args.min_cvss)
+    cves = fetch_cves(limit=args.limit, min_cvss=args.min_cvss)
     chunks = []
     for cve in cves:
         chunks.extend(chunk_cve_document(cve))
 
     ingest_to_chromadb(chunks, CVE_KNOWLEDGE)
-    logger.info(f"[nvd] ✓ Loaded {len(cves)} CVE records ({len(chunks)} chunks) into {CVE_KNOWLEDGE}")
+    logger.info(
+        f"[nvd] ✓ Loaded {len(cves)} CVE records ({len(chunks)} chunks) into {CVE_KNOWLEDGE}"
+    )

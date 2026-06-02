@@ -7,25 +7,23 @@
 # RUN: pytest tests/unit/test_mcp_transport.py -v
 # =============================================================================
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from agents.shared.mcp_transport import (
-    truncate_output,
-    MAX_TOOL_OUTPUT_TOKENS,
-    RedTeamTransport,
-    BlueTeamTransport,
-    RED_TEAM_ALLOWED_TOOLS,
     BLUE_TEAM_ALLOWED_TOOLS,
+    MAX_TOOL_OUTPUT_TOKENS,
+    RED_TEAM_ALLOWED_TOOLS,
+    BlueTeamTransport,
+    RedTeamTransport,
+    truncate_output,
 )
-
 
 # ---------------------------------------------------------------------------
 # Output Truncation (CRITICAL — never bypass)
 # ---------------------------------------------------------------------------
 
-class TestOutputTruncation:
 
+class TestOutputTruncation:
     def test_short_output_not_truncated(self):
         short_text = "open ports: 80, 443"
         result, was_truncated = truncate_output(short_text)
@@ -43,7 +41,9 @@ class TestOutputTruncation:
         long_text = "x" * 100_000
         result, _ = truncate_output(long_text)
         estimated_tokens = len(result) // 4
-        assert estimated_tokens <= MAX_TOOL_OUTPUT_TOKENS + 50  # small buffer for truncation message
+        assert (
+            estimated_tokens <= MAX_TOOL_OUTPUT_TOKENS + 50
+        )  # small buffer for truncation message
 
     def test_custom_max_tokens_respected(self):
         text = "a" * 2000  # ~500 tokens
@@ -56,8 +56,8 @@ class TestOutputTruncation:
 # Red Team Transport — Tool Allowlist
 # ---------------------------------------------------------------------------
 
-class TestRedTeamTransport:
 
+class TestRedTeamTransport:
     def test_disallowed_tool_rejected(self):
         rt = RedTeamTransport()
         result = rt.run_tool("rm", ["-rf"], "target")
@@ -104,15 +104,15 @@ class TestRedTeamTransport:
 # Blue Team Transport — Patch Scope Enforcement (CRITICAL)
 # ---------------------------------------------------------------------------
 
-class TestBlueTeamPatchScopeEnforcement:
 
+class TestBlueTeamPatchScopeEnforcement:
     def test_patch_within_allowed_path_accepted(self):
         bt = BlueTeamTransport()
         patch_diff = (
             "--- a/wp-includes/class-wpdb.php\n"
             "+++ b/wp-includes/class-wpdb.php\n"
             "@@ -140,7 +140,7 @@\n"
-            "-    $query = \"SELECT * FROM users WHERE id = $id\";\n"
+            '-    $query = "SELECT * FROM users WHERE id = $id";\n'
             "+    $stmt = $pdo->prepare('SELECT * FROM users WHERE id = ?');\n"
         )
         allowed_paths = ["wp-includes/class-wpdb.php"]
@@ -153,10 +153,10 @@ class TestBlueTeamPatchScopeEnforcement:
 
     def test_blue_team_cannot_use_offensive_tools(self):
         """Blue Team must NOT be able to run nmap or other offensive tools."""
-        assert "nmap"        not in BLUE_TEAM_ALLOWED_TOOLS
-        assert "gobuster"    not in BLUE_TEAM_ALLOWED_TOOLS
+        assert "nmap" not in BLUE_TEAM_ALLOWED_TOOLS
+        assert "gobuster" not in BLUE_TEAM_ALLOWED_TOOLS
         assert "feroxbuster" not in BLUE_TEAM_ALLOWED_TOOLS
-        assert "nikto"       not in BLUE_TEAM_ALLOWED_TOOLS
+        assert "nikto" not in BLUE_TEAM_ALLOWED_TOOLS
 
 
 # ---------------------------------------------------------------------------
@@ -167,8 +167,8 @@ class TestBlueTeamPatchScopeEnforcement:
 #   2. `allowed in modified` substring match accepted path-traversal payloads
 # ---------------------------------------------------------------------------
 
-class TestBlueTeamPatchScopeSecurityRegressions:
 
+class TestBlueTeamPatchScopeSecurityRegressions:
     def test_path_traversal_attempt_is_rejected(self):
         """
         Original bug: `allowed in modified` substring check.
@@ -193,30 +193,17 @@ class TestBlueTeamPatchScopeSecurityRegressions:
         A file named 'apps/foo.py' became 'pps/foo.py' and silently mismatched.
         """
         bt = BlueTeamTransport()
-        patch_diff = (
-            "--- a/apps/foo.py\n"
-            "+++ b/apps/foo.py\n"
-            "@@ -1 +1 @@\n"
-            "-old\n"
-            "+new\n"
-        )
+        patch_diff = "--- a/apps/foo.py\n+++ b/apps/foo.py\n@@ -1 +1 @@\n-old\n+new\n"
         allowed_paths = ["apps/foo.py"]
         result = bt._validate_patch_scope(patch_diff, allowed_paths)
         assert result is None, (
-            f"File starting with 'a' should match its allowed path exactly. "
-            f"Got: {result!r}"
+            f"File starting with 'a' should match its allowed path exactly. Got: {result!r}"
         )
 
     def test_filename_starting_with_b_is_not_over_stripped(self):
         """Same as above, for paths starting with 'b' — e.g. 'bin/runner.sh'."""
         bt = BlueTeamTransport()
-        patch_diff = (
-            "--- a/bin/runner.sh\n"
-            "+++ b/bin/runner.sh\n"
-            "@@ -1 +1 @@\n"
-            "-old\n"
-            "+new\n"
-        )
+        patch_diff = "--- a/bin/runner.sh\n+++ b/bin/runner.sh\n@@ -1 +1 @@\n-old\n+new\n"
         allowed_paths = ["bin/runner.sh"]
         result = bt._validate_patch_scope(patch_diff, allowed_paths)
         assert result is None, f"'bin/...' should match allowed exactly. Got: {result!r}"
@@ -256,11 +243,7 @@ class TestBlueTeamPatchScopeSecurityRegressions:
         """File deletion in a unified diff uses /dev/null on one side."""
         bt = BlueTeamTransport()
         patch_diff = (
-            "--- a/wp-includes/class-wpdb.php\n"
-            "+++ /dev/null\n"
-            "@@ -1,2 +0,0 @@\n"
-            "-line1\n"
-            "-line2\n"
+            "--- a/wp-includes/class-wpdb.php\n+++ /dev/null\n@@ -1,2 +0,0 @@\n-line1\n-line2\n"
         )
         allowed_paths = ["wp-includes/class-wpdb.php"]
         result = bt._validate_patch_scope(patch_diff, allowed_paths)

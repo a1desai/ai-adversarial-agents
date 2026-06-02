@@ -23,12 +23,11 @@
 #      from the lead + one additional hire before merge.
 # =============================================================================
 
-import subprocess
-import json
 import posixpath
 import shlex
-from pathlib import Path
+import subprocess
 from dataclasses import dataclass, field
+
 from loguru import logger
 
 
@@ -64,9 +63,9 @@ def _parse_diff_header_path(line: str) -> str | None:
 # Configuration
 # ---------------------------------------------------------------------------
 
-MAX_TOOL_OUTPUT_TOKENS = 1_000    # hard cap on tool output before context injection
-OLLAMA_BASE_URL        = "http://localhost:11434"
-TARGET_NETWORK         = "sandbox_targets"   # Docker network name for target containers
+MAX_TOOL_OUTPUT_TOKENS = 1_000  # hard cap on tool output before context injection
+OLLAMA_BASE_URL = "http://localhost:11434"
+TARGET_NETWORK = "sandbox_targets"  # Docker network name for target containers
 
 # Tools available to Red Team agents
 RED_TEAM_ALLOWED_TOOLS = {
@@ -81,10 +80,10 @@ RED_TEAM_ALLOWED_TOOLS = {
 
 # Blue Team is NOT allowed to run offensive tools
 BLUE_TEAM_ALLOWED_TOOLS = {
-    "curl",       # HTTP health checks
-    "diff",       # patch application verification
-    "grep",       # log search
-    "cat",        # read source files (read-only)
+    "curl",  # HTTP health checks
+    "diff",  # patch application verification
+    "grep",  # log search
+    "cat",  # read source files (read-only)
 }
 
 
@@ -92,20 +91,22 @@ BLUE_TEAM_ALLOWED_TOOLS = {
 # Tool Result
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ToolResult:
-    tool:          str
-    success:       bool
-    raw_output:    str
-    truncated:     bool
+    tool: str
+    success: bool
+    raw_output: str
+    truncated: bool
     token_estimate: int
-    structured:    dict = field(default_factory=dict)  # parsed, structured output
-    error:         str | None = None
+    structured: dict = field(default_factory=dict)  # parsed, structured output
+    error: str | None = None
 
 
 # ---------------------------------------------------------------------------
 # Output Truncation (MANDATORY — never bypass)
 # ---------------------------------------------------------------------------
+
 
 def _estimate_tokens(text: str) -> int:
     """Rough token estimate: ~4 chars per token."""
@@ -125,7 +126,7 @@ def truncate_output(raw: str, max_tokens: int = MAX_TOOL_OUTPUT_TOKENS) -> tuple
 
     # Truncate to approximate token limit (chars = tokens * 4)
     char_limit = max_tokens * 4
-    truncated  = raw[:char_limit]
+    truncated = raw[:char_limit]
     truncated += f"\n\n[OUTPUT TRUNCATED: {estimated} tokens → {max_tokens} tokens max]"
     logger.warning(f"[mcp] Output truncated: {estimated} → {max_tokens} tokens")
     return truncated, True
@@ -134,6 +135,7 @@ def truncate_output(raw: str, max_tokens: int = MAX_TOOL_OUTPUT_TOKENS) -> tuple
 # ---------------------------------------------------------------------------
 # Tool Execution (Red Team)
 # ---------------------------------------------------------------------------
+
 
 class RedTeamTransport:
     """
@@ -156,8 +158,11 @@ class RedTeamTransport:
         if tool not in RED_TEAM_ALLOWED_TOOLS:
             logger.error(f"[mcp/red] Tool '{tool}' not in allowed list")
             return ToolResult(
-                tool=tool, success=False, raw_output="",
-                truncated=False, token_estimate=0,
+                tool=tool,
+                success=False,
+                raw_output="",
+                truncated=False,
+                token_estimate=0,
                 error=f"Tool '{tool}' is not permitted for Red Team",
             )
 
@@ -175,15 +180,21 @@ class RedTeamTransport:
         except subprocess.TimeoutExpired:
             logger.warning(f"[mcp/red] Tool '{tool}' timed out after 120s")
             return ToolResult(
-                tool=tool, success=False, raw_output="",
-                truncated=False, token_estimate=0,
+                tool=tool,
+                success=False,
+                raw_output="",
+                truncated=False,
+                token_estimate=0,
                 error="Tool execution timed out",
             )
         except FileNotFoundError:
             logger.error(f"[mcp/red] Tool '{tool}' not found — is it installed?")
             return ToolResult(
-                tool=tool, success=False, raw_output="",
-                truncated=False, token_estimate=0,
+                tool=tool,
+                success=False,
+                raw_output="",
+                truncated=False,
+                token_estimate=0,
                 error=f"Tool '{tool}' not found on PATH",
             )
 
@@ -229,12 +240,14 @@ class RedTeamTransport:
             line = line.strip()
             if "/tcp" in line and "open" in line:
                 parts = line.split()
-                ports.append({
-                    "port":     parts[0] if parts else "unknown",
-                    "state":    parts[1] if len(parts) > 1 else "unknown",
-                    "service":  parts[2] if len(parts) > 2 else "unknown",
-                    "version":  " ".join(parts[3:]) if len(parts) > 3 else "",
-                })
+                ports.append(
+                    {
+                        "port": parts[0] if parts else "unknown",
+                        "state": parts[1] if len(parts) > 1 else "unknown",
+                        "service": parts[2] if len(parts) > 2 else "unknown",
+                        "version": " ".join(parts[3:]) if len(parts) > 3 else "",
+                    }
+                )
 
         return {"ports": ports, "raw_summary": raw[:500]}  # hard cap on raw in struct
 
@@ -242,6 +255,7 @@ class RedTeamTransport:
 # ---------------------------------------------------------------------------
 # Blue Team Transport (Read-Only Source Access + Patch Deployment)
 # ---------------------------------------------------------------------------
+
 
 class BlueTeamTransport:
     """
@@ -264,8 +278,12 @@ class BlueTeamTransport:
             raw = result.stdout
         except Exception as e:
             return ToolResult(
-                tool="read_source", success=False, raw_output="",
-                truncated=False, token_estimate=0, error=str(e),
+                tool="read_source",
+                success=False,
+                raw_output="",
+                truncated=False,
+                token_estimate=0,
+                error=str(e),
             )
 
         truncated_output, was_truncated = truncate_output(raw)
@@ -280,9 +298,9 @@ class BlueTeamTransport:
 
     def deploy_patch(
         self,
-        container_id:     str,
-        patch_diff:       str,
-        allowed_paths:    list[str],  # from Vulnerability Analysis — enforced here
+        container_id: str,
+        patch_diff: str,
+        allowed_paths: list[str],  # from Vulnerability Analysis — enforced here
     ) -> ToolResult:
         """
         Applies a unified diff patch to a target container.
@@ -304,23 +322,26 @@ class BlueTeamTransport:
         if rejection:
             logger.error(f"[mcp/blue] Patch REJECTED — scope violation: {rejection}")
             return ToolResult(
-                tool="deploy_patch", success=False, raw_output="",
-                truncated=False, token_estimate=0,
+                tool="deploy_patch",
+                success=False,
+                raw_output="",
+                truncated=False,
+                token_estimate=0,
                 error=f"Patch scope violation: {rejection}",
             )
 
         # Write patch to temp file and apply
-        import tempfile, os
+        import os
+        import tempfile
+
         with tempfile.NamedTemporaryFile(mode="w", suffix=".patch", delete=False) as f:
             f.write(patch_diff)
             patch_file = f.name
 
         try:
             cmd = ["docker", "exec", "-i", container_id, "patch", "-p1"]
-            with open(patch_file, "r") as pf:
-                result = subprocess.run(
-                    cmd, stdin=pf, capture_output=True, text=True, timeout=60
-                )
+            with open(patch_file) as pf:
+                result = subprocess.run(cmd, stdin=pf, capture_output=True, text=True, timeout=60)
             raw = result.stdout + result.stderr
             success = result.returncode == 0
             logger.info(f"[mcp/blue] Patch {'applied' if success else 'FAILED'}: {container_id}")
@@ -405,8 +426,12 @@ class BlueTeamTransport:
             raw = result.stdout + result.stderr
         except Exception as e:
             return ToolResult(
-                tool="read_logs", success=False, raw_output="",
-                truncated=False, token_estimate=0, error=str(e),
+                tool="read_logs",
+                success=False,
+                raw_output="",
+                truncated=False,
+                token_estimate=0,
+                error=str(e),
             )
 
         truncated, was_truncated = truncate_output(raw, max_tokens=800)  # stricter for logs

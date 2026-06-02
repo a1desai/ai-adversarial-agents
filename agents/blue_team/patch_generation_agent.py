@@ -24,11 +24,8 @@
 # REFERENCE: Blue Team Report — Section 4.2.4, 5.3
 # =============================================================================
 
-from loguru import logger
 
-from agents.shared.memory import parallel_retrieval, get_collection, BLUE_EPISODIC
-from agents.shared.ollama_client import get_client, ModelRole, TaskType
-
+from agents.shared.ollama_client import get_client
 
 MINIMUM_CONFIDENCE_TO_DEPLOY = 0.6
 
@@ -68,9 +65,8 @@ class PatchGenerationAgent:
                 "rationale":     "CWE-89 in PHP requires..."
             }
         """
-        cwe = vulnerability_analysis.get("cwe_classification", "unknown")
-
         # Step 1: Parallel memory retrieval
+        # TODO: cwe = vulnerability_analysis.get("cwe_classification", "unknown")
         # TODO: memory = parallel_retrieval(query=cwe, team="blue", n_results_each=3)
         # Metadata filter: {"cwe_type": cwe_type_short} for blue_procedural
 
@@ -116,11 +112,14 @@ class PatchGenerationAgent:
         - Has at least one + or - line
         """
         lines = patch_diff.splitlines()
-        has_old = any(l.startswith("---") for l in lines)
-        has_new = any(l.startswith("+++") for l in lines)
-        has_hunk = any(l.startswith("@@") for l in lines)
-        has_changes = any(l.startswith("+") or l.startswith("-") for l in lines
-                         if not l.startswith("+++") and not l.startswith("---"))
+        has_old = any(line.startswith("---") for line in lines)
+        has_new = any(line.startswith("+++") for line in lines)
+        has_hunk = any(line.startswith("@@") for line in lines)
+        has_changes = any(
+            line.startswith("+") or line.startswith("-")
+            for line in lines
+            if not line.startswith("+++") and not line.startswith("---")
+        )
 
         return has_old and has_new and has_hunk and has_changes
 

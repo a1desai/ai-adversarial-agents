@@ -19,18 +19,16 @@
 # REFERENCE: Blue Team Report — Section 4.2.1 and 4.3
 # =============================================================================
 
-from langgraph.graph import StateGraph, END
-from loguru import logger
+from langgraph.graph import StateGraph
 
-from agents.blue_team.blue_team import BlueTeamState, DefensePhase, PatchOutcome
-from agents.shared.ollama_client import get_client
+from agents.blue_team.blue_team import BlueTeamState
 
 # Hard caps — DO NOT change without lead approval (must match Red Team caps)
-MAX_STEPS              = 30
-MAX_TOKENS             = 50_000
-MAX_SECONDS            = 900   # 15 minutes
-MAX_PATCH_ATTEMPTS     = 3
-MIN_CONFIDENCE_DEPLOY  = 0.6   # below this, regenerate instead of deploying
+MAX_STEPS = 30
+MAX_TOKENS = 50_000
+MAX_SECONDS = 900  # 15 minutes
+MAX_PATCH_ATTEMPTS = 3
+MIN_CONFIDENCE_DEPLOY = 0.6  # below this, regenerate instead of deploying
 
 
 def create_blue_team_graph() -> StateGraph:
@@ -44,7 +42,6 @@ def create_blue_team_graph() -> StateGraph:
         Entry:  init_node (triggered by hypervisor exploit_detected event)
     """
     # TODO (Blue Team Hire): implement full graph
-    graph = StateGraph(BlueTeamState)
     raise NotImplementedError("Blue Team graph not yet implemented — see TODO above")
 
 

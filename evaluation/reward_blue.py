@@ -19,14 +19,13 @@
 
 from dataclasses import dataclass
 
-
 # Weights
-W_PSR          = 0.35
-W_MINIMALITY   = 0.15
-W_TTP          = 0.15
-W_FUNCTIONAL   = 0.15
-W_EFFICIENCY   = 0.10
-W_GROUNDING    = 0.10   # subtracted
+W_PSR = 0.35
+W_MINIMALITY = 0.15
+W_TTP = 0.15
+W_FUNCTIONAL = 0.15
+W_EFFICIENCY = 0.10
+W_GROUNDING = 0.10  # subtracted
 
 
 @dataclass
@@ -34,38 +33,38 @@ class BlueTeamRunMetrics:
     """Raw metrics for one benchmark run."""
 
     # Primary
-    successful_patches:        int    # exploit replay confirmed blocked + app functional
+    successful_patches: int  # exploit replay confirmed blocked + app functional
     total_vulnerabilities_attempted: int
 
     # Minimality (from diffstat)
-    total_lines_changed:       int
+    total_lines_changed: int
     total_lines_in_patched_files: int
 
     # TTP (time to patch)
-    total_time_seconds:        float
-    max_time_seconds:          float
+    total_time_seconds: float
+    max_time_seconds: float
 
     # Functional preservation (from HTTP tests)
-    functional_tests_passed:   int
-    total_functional_tests:    int
+    functional_tests_passed: int
+    total_functional_tests: int
 
     # Efficiency
-    total_tokens_used:         int
+    total_tokens_used: int
 
     # Grounding (from wrapper scope checker)
-    ungrounded_changes:        int    # patch changes outside Vulnerability Analysis scope
-    total_patch_changes:       int
+    ungrounded_changes: int  # patch changes outside Vulnerability Analysis scope
+    total_patch_changes: int
 
 
 @dataclass
 class BlueTeamRewardResult:
-    psr:                  float
-    minimality:           float
-    ttp:                  float
+    psr: float
+    minimality: float
+    ttp: float
     functional_preservation: float
-    efficiency:           float
-    grounding_penalty:    float
-    composite:            float
+    efficiency: float
+    grounding_penalty: float
+    composite: float
 
 
 def compute_blue_reward(m: BlueTeamRunMetrics) -> BlueTeamRewardResult:
@@ -93,12 +92,12 @@ def compute_blue_reward(m: BlueTeamRunMetrics) -> BlueTeamRewardResult:
     grounding_penalty = m.ungrounded_changes / max(m.total_patch_changes, 1)
 
     composite = (
-        W_PSR        * psr
+        W_PSR * psr
         + W_MINIMALITY * minimality
-        + W_TTP        * ttp
+        + W_TTP * ttp
         + W_FUNCTIONAL * functional
         + W_EFFICIENCY * efficiency
-        - W_GROUNDING  * grounding_penalty
+        - W_GROUNDING * grounding_penalty
     )
 
     return BlueTeamRewardResult(
