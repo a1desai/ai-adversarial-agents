@@ -85,15 +85,15 @@ pre-commit run --all-files    # one-time pass to fix existing files
 
 ```bash
 # Ollama wiring works
-python agents/shared/ollama_client.py
+PYTHONPATH=. python agents/shared/ollama_client.py
 # Expected: "✓ Ollama is running and all models are available" + a smoke response
 
 # ChromaDB initializes all 6 collections
-python agents/shared/memory.py
+PYTHONPATH=. python agents/shared/memory.py
 # Expected: "ChromaDB initialized successfully" + 6 collection names
 
 # Dummy data loads
-python dummy_data/loader.py
+PYTHONPATH=. python dummy_data/loader.py
 # Expected: "loaded 5 dummy CVE records into cve_knowledge"
 #           "loaded 5 dummy CVE records into patch_knowledge"
 ```
@@ -269,6 +269,12 @@ This is documented as a known cost. On 12+ GB GPUs you can preload both.
 Almost always: missing env var, different Python version, or different
 Ollama models pulled. Check `.python-version` if it exists, and confirm
 your Ollama has the three models from §2.2.
+
+### `python dummy_data/loader.py` fails with ModuleNotFoundError
+Run it with `PYTHONPATH=. python dummy_data/loader.py`. The `pythonpath = .`
+setting in `pytest.ini` applies only inside pytest, not when running scripts
+directly. The one-liner above is the canonical way to run any script in this
+repo that imports from `agents/`.
 
 ### ChromaDB warns about "legacy embedding function"
 A deprecation warning from chromadb >= 0.5. Harmless — fixtures use a fake
