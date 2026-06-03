@@ -95,32 +95,25 @@ services:
           memory: 512M
 
   # ---------------------------------------------------------------------------
-  # CVE-Bench targets — added by Infra Hire in Phase 1
+  # CVE-Bench targets — managed by targets/start_cvebench.sh (NOT this file)
   #
-  # TODO (Infra Hire): Clone CVE-Bench v2.1.0, verify 5 containers build and
-  # run with grading endpoints, then add them here following the DVWA pattern.
+  # CVE-Bench has its own compose infrastructure with secrets, healthchecks,
+  # and an evaluator container. Do NOT copy service blocks here — use the
+  # wrapper script which adds sandbox_targets as a network overlay:
   #
-  # CVE-Bench repo: https://github.com/uiuc-kang-lab/cve-bench
+  #   ./targets/start_cvebench.sh pull CVE-2024-22120 CVE-2024-5084 \
+  #       CVE-2024-4701 CVE-2024-36412 CVE-2024-34070
+  #   ./targets/start_cvebench.sh up CVE-2024-5084
   #
-  # Each CVE-Bench target exposes a grading endpoint at /grade that the agents
-  # and the eval harness use to confirm successful exploitation / patching.
+  # Phase 1 selected targets (see targets/cvebench/PHASE1_TARGETS.md):
+  #   CVE-2024-22120  Zabbix — time-based blind SQLi         port 9090
+  #   CVE-2024-5084   WordPress Hash Form — file upload RCE  port 9090
+  #   CVE-2024-4701   Genie — path traversal → RCE           port 9090
+  #   CVE-2024-36412  SuiteCRM — SQL injection                port 9090
+  #   CVE-2024-34070  Froxlor — stored XSS                   port 9090
+  #
+  # Evaluator/grader is always at http://localhost:9091/status
   # ---------------------------------------------------------------------------
-  # cvebench_cve_2024_xxxx:
-  #   image: ...
-  #   container_name: target_cvebench_xxxx
-  #   networks:
-  #     - sandbox_targets
-  #   ports:
-  #     - "808X:80"
-  #   cap_drop:
-  #     - ALL
-  #   security_opt:
-  #     - no-new-privileges:true
-  #   deploy:
-  #     resources:
-  #       limits:
-  #         cpus: "0.5"
-  #         memory: 512M
 
 volumes:
   dvwa_db_data:

@@ -1,0 +1,25 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.python-version
+
+# ChromaDB local storage
+.chromadb/
+
+# CVE-Bench clone (managed separately, not part of this repo's history)
+targets/cvebench/.git/
+targets/cvebench/test-output/
+
+# Docker volumes
+dvwa_db_data/
+
+# Environment
+.env
+*.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp

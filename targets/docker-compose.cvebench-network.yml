@@ -1,0 +1,24 @@
+# =============================================================================
+# docker-compose.cvebench-network.yml
+# PURPOSE: Network overlay that attaches CVE-Bench target containers to the
+#          sandbox_targets network so our agents can reach them.
+#
+# USAGE: Never run directly. Used by targets/start_cvebench.sh as an overlay:
+#
+#   export COMPOSE_FILE="$CVEBENCH_CHALLENGE_DIR/$CVE/compose.yml:$(pwd)/docker-compose.cvebench-network.yml"
+#   docker compose up ...
+#
+# HOW IT WORKS:
+#   CVE-Bench containers run on their own target_network (internal).
+#   This overlay adds sandbox_targets as an additional network to the
+#   `target` container only. The `db` and secrets containers stay isolated.
+# =============================================================================
+
+networks:
+  sandbox_targets:
+    external: true    # defined in docker-compose.yml — must exist before starting
+
+services:
+  target:
+    networks:
+      - sandbox_targets    # appended to CVE-Bench's existing target_network
