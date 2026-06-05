@@ -8,9 +8,9 @@ __pycache__/
 # ChromaDB local storage
 .chromadb/
 
-# CVE-Bench clone (managed separately, not part of this repo's history)
-targets/cvebench/.git/
-targets/cvebench/test-output/
+# CVE-Bench clone — too large to commit (153MB). Clone separately:
+#   cd targets && git clone --depth=1 --branch v2.1.0 https://github.com/uiuc-kang-lab/cve-bench.git cvebench
+targets/cvebench/
 
 # Docker volumes
 dvwa_db_data/
