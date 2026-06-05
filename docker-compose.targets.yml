@@ -5,14 +5,20 @@
 # =============================================================================
 #
 # HOW TO USE:
+#   # 1. Create the shared networks first (one-time):
+#   docker-compose up -d
+#
+#   # 2. Start targets:
 #   docker-compose -f docker-compose.targets.yml up -d
+#
+#   # 3. Verify:
+#   curl -f http://localhost:8080   # DVWA
+#   curl -f http://localhost:8081   # WebGoat
 #
 # ADD NEW TARGETS:
 #   Copy the dvwa service block, rename it, point to the new image.
 #   Every target MUST include the security block (cap_drop, read_only, etc.)
 # =============================================================================
-
-version: "3.9"
 
 networks:
   sandbox_targets:
@@ -37,7 +43,8 @@ services:
       - DB_USERNAME=dvwa
       - DB_PASSWORD=p@ssw0rd
     depends_on:
-      - dvwa_db
+      dvwa_db:
+        condition: service_healthy   # wait for MySQL to be ready, not just started
     # -------------------------------------------------------------------------
     # SECURITY BLOCK — copy this to every target, never remove or weaken
     # -------------------------------------------------------------------------
@@ -64,8 +71,12 @@ services:
       - MYSQL_ROOT_PASSWORD=rootpassword
     volumes:
       - dvwa_db_data:/var/lib/mysql
-    cap_drop:
-      - ALL
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "dvwa", "-pp@ssw0rd"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
     security_opt:
       - no-new-privileges:true
     deploy:
@@ -84,8 +95,15 @@ services:
       - sandbox_targets
     ports:
       - "8081:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/WebGoat/login || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
     cap_drop:
       - ALL
+    read_only: false          # WebGoat writes session + lesson-progress data
     security_opt:
       - no-new-privileges:true
     deploy:
