@@ -22,7 +22,9 @@
 
 networks:
   sandbox_targets:
-    external: true          # defined in docker-compose.yml
+    external: true          # defined in docker-compose.yml — internal, no internet
+  dev:
+    driver: bridge          # non-internal, host port publishing works through this
 
 services:
 
@@ -35,6 +37,7 @@ services:
     container_name: target_dvwa
     networks:
       - sandbox_targets
+      - dev
     ports:
       - "8080:80"           # accessible at http://localhost:8080 from hypervisor only
     environment:
@@ -93,10 +96,11 @@ services:
     container_name: target_webgoat
     networks:
       - sandbox_targets
+      - dev
     ports:
       - "8081:8080"
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/WebGoat/login || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/WebGoat/login || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 12
