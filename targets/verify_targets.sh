@@ -5,7 +5,7 @@
 # USAGE:   ./targets/verify_targets.sh
 # =============================================================================
 
-set -e
+set -euo pipefail
 
 pass=0
 fail=0
@@ -17,10 +17,10 @@ check() {
 
     if curl -sf --max-time 5 "$url" | grep -q "$expect" 2>/dev/null; then
         echo "  PASS  $name ($url)"
-        ((pass++))
+        pass=$((pass + 1))
     else
         echo "  FAIL  $name ($url)"
-        ((fail++))
+        fail=$((fail + 1))
     fi
 }
 
