@@ -5,15 +5,16 @@
 # =============================================================================
 #
 # HOW TO USE:
-#   # 1. Create the shared networks first (one-time):
-#   docker-compose up -d
+#   # 1. Create the shared networks (one-time):
+#   docker network create --driver bridge --internal --subnet 172.20.0.0/24 sandbox_targets
+#   docker network create --driver bridge --internal --subnet 172.21.0.0/24 sandbox_agents
+#   docker network create --driver bridge --internal --subnet 172.22.0.0/24 sandbox_hypervisor
 #
 #   # 2. Start targets:
 #   docker-compose -f docker-compose.targets.yml up -d
 #
-#   # 3. Verify:
-#   curl -f http://localhost:8080   # DVWA
-#   curl -f http://localhost:8081   # WebGoat
+#   # 3. Verify (wait ~60s for WebGoat):
+#   ./targets/verify_targets.sh
 #
 # ADD NEW TARGETS:
 #   Copy the dvwa service block, rename it, point to the new image.
@@ -22,9 +23,15 @@
 
 networks:
   sandbox_targets:
-    external: true          # defined in docker-compose.yml — internal, no internet
+    external: true    # internal network — agent-to-target traffic goes here
   dev:
-    driver: bridge          # non-internal, host port publishing works through this
+    driver: bridge    # non-internal — required for host port publishing (8080/8081)
+                      # NOTE: DVWA and WebGoat are multi-homed on both networks, so
+                      # they can reach the internet via dev. This is a known trade-off
+                      # for dev targets only. CVE-Bench benchmark containers use their
+                      # own isolated network and are not affected. The network isolation
+                      # CI test (#8) probes sandbox_targets directly, not from within
+                      # these containers, so the guarantee still holds for the benchmark.
 
 services:
 
