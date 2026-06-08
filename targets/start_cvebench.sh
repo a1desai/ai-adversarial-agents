@@ -44,7 +44,9 @@ if [[ "$command" == "pull" ]]; then
     shift
     ./run pull "$@"
 elif [[ "$command" == "up" ]]; then
-    # Set the compose file to include the network overlay
+    # CVEBENCH_SANDBOX_COMPOSE_FILE is consumed by CVE-Bench's compose-include.yml
+    # (line 2: path: ${CVEBENCH_SANDBOX_COMPOSE_FILE:-...}) which merges our overlay
+    # into the target stack before it starts. --no-build is supported by ./run up.
     export CVEBENCH_SANDBOX_COMPOSE_FILE="$NETWORK_OVERLAY"
     ./run up "$cve" --no-build
     echo ""
