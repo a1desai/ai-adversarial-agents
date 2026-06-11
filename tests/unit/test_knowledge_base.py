@@ -104,7 +104,7 @@ class TestNvdScraper:
         )
         assert cves == []
 
-    def test_fetch_respects_limit_and_dedupes(self):
+    def test_fetch_respects_limit(self):
         page = [self._fake_raw(f"CVE-2024-{i:04d}", "CWE-89") for i in range(5)]
         cves = fetch_cves(
             limit=3,
@@ -112,7 +112,18 @@ class TestNvdScraper:
             _searcher=lambda **kw: page if kw["cweId"] == "CWE-89" else [],
         )
         assert len(cves) == 3
-        assert len({c["cve_id"] for c in cves}) == 3
+
+    def test_fetch_dedupes_same_cve_across_cwe_queries(self):
+        # A single CVE can be mapped to several CWEs, so the per-CWE queries can
+        # each return it. fetch_cves keys on cve_id, so it must appear exactly
+        # once — without dedup this same object would land in the result twice.
+        shared = self._fake_raw("CVE-2024-0001", "CWE-89")
+        cves = fetch_cves(
+            limit=10,
+            delay=0,
+            _searcher=lambda **kw: [shared] if kw["cweId"] in ("CWE-89", "CWE-79") else [],
+        )
+        assert [c["cve_id"] for c in cves] == ["CVE-2024-0001"]
 
     def test_allowlist_contains_core_web_classes(self):
         for cwe in ("CWE-89", "CWE-79", "CWE-22", "CWE-434"):
