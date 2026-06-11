@@ -196,9 +196,9 @@ class TestBlueTeamPatchScopeSecurityRegressions:
         patch_diff = "--- a/apps/foo.py\n+++ b/apps/foo.py\n@@ -1 +1 @@\n-old\n+new\n"
         allowed_paths = ["apps/foo.py"]
         result = bt._validate_patch_scope(patch_diff, allowed_paths)
-        assert result is None, (
-            f"File starting with 'a' should match its allowed path exactly. Got: {result!r}"
-        )
+        assert (
+            result is None
+        ), f"File starting with 'a' should match its allowed path exactly. Got: {result!r}"
 
     def test_filename_starting_with_b_is_not_over_stripped(self):
         """Same as above, for paths starting with 'b' — e.g. 'bin/runner.sh'."""
