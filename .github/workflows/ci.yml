@@ -1,0 +1,89 @@
+# =============================================================================
+# .github/workflows/ci.yml
+# PURPOSE: Continuous integration gate.
+#   - lint-and-unit:      ruff + the default (unit) test suite on every push/PR.
+#   - network-isolation:  enforces the sandbox isolation guarantees (issue #8)
+#                         so a regression that gives targets internet egress, or
+#                         drops the cap_drop hardening, breaks the build.
+# =============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          # Pin ruff to the version pinned in .pre-commit-config.yaml so CI and
+          # the local pre-commit hook agree on lint + format rules.
+          pip install ruff==0.7.4
+
+      - name: Ruff lint
+        run: ruff check .
+
+      - name: Ruff format check
+        run: ruff format --check .
+
+      - name: Unit tests
+        run: pytest -m "unit" -v
+
+  network-isolation:
+    # Issue #8 — codified sandbox isolation. Depends on the #7 target stack.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install "pytest>=8.3.0"
+
+      - name: Create sandbox networks
+        run: |
+          docker network create --driver bridge --internal --subnet 172.20.0.0/24 sandbox_targets
+          docker network create --driver bridge --internal --subnet 172.21.0.0/24 sandbox_agents
+          docker network create --driver bridge --internal --subnet 172.22.0.0/24 sandbox_hypervisor
+
+      - name: Start target containers
+        run: docker compose -f docker-compose.targets.yml up -d
+
+      - name: Wait for targets to become healthy
+        # Best-effort: the egress probe only needs the network, and the
+        # cap_drop checks skip cleanly if a container never reports healthy.
+        run: |
+          for i in $(seq 1 18); do
+            if docker ps --filter "name=target_webgoat" --filter "health=healthy" \
+                 --format '{{.Names}}' | grep -q target_webgoat; then
+              echo "targets healthy after ~$((i*10))s"; break
+            fi
+            sleep 10
+          done
+          docker ps --filter "name=target_" --format "  {{.Names}}\t{{.Status}}"
+
+      - name: Run network isolation tests
+        run: pytest tests/smoke/test_stack.py::TestNetworkIsolation -m smoke -v
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.targets.yml down -v || true
