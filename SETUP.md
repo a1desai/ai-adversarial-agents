@@ -81,7 +81,18 @@ pre-commit install
 pre-commit run --all-files    # one-time pass to fix existing files
 ```
 
-### 2.5 Verify the environment
+### 2.5 Install recon tools (macOS)
+
+Required for `ReconAgent.run()` to return real data. Without these, the agent
+degrades gracefully but returns empty results.
+
+```bash
+brew install nmap whatweb gobuster
+```
+
+On Linux: `sudo apt install nmap gobuster` and `gem install whatweb`.
+
+### 2.6 Verify the environment
 
 ```bash
 # Ollama wiring works
@@ -161,8 +172,7 @@ pytest tests/unit/ --cov=agents --cov-report=term-missing
 `tests/smoke/test_stack.py` only runs once the full stack is up:
 
 ```bash
-docker-compose up -d
-docker-compose -f docker-compose.targets.yml up -d
+docker compose -f docker-compose.targets.yml up -d
 ollama serve   # in another terminal if not already running
 
 pytest tests/smoke/ -m smoke -v
@@ -190,7 +200,6 @@ stack feels broken.
 - Pass 80 unit tests
 
 ### Can't do (yet — work for hires)
-- Run reconnaissance: `ReconAgent.run()` is a stub
 - Plan or execute exploits: `ExploitationAgent` methods are stubs
 - Analyze attack logs: `LogAnalysisAgent.analyze()` is a stub
 - Generate patches: `PatchGenerationAgent.generate_patch()` is a stub
@@ -199,7 +208,7 @@ stack feels broken.
 - Build the agent containers: no Dockerfiles in `agents/red_team/` or `agents/blue_team/` yet
 - Run the hypervisor bridge: only a README in `hypervisor/`
 - Execute the benchmark: `evaluation/benchmark_runner.py` doesn't exist yet
-- Run the README's quick-start smoke test (`python agents/red_team/recon_agent.py --target ...`) — will raise `NotImplementedError`
+- Run the README's quick-start smoke test end-to-end: `ExploitationAgent` and pipeline not yet wired up
 
 **This is intentional.** Phase 0 was about getting the foundation safe. Phase 1
 is where these stubs get filled in. See `docs/issues.md` for the full plan.
