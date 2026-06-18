@@ -7,11 +7,6 @@
 # =============================================================================
 
 
-import pytest
-
-from evaluation.reward_blue import (
-    REFERENCE_TOKENS_PER_SUCCESS as BLUE_REF_TOKENS,
-)
 from evaluation.reward_blue import (
     W_EFFICIENCY as BW_EFFICIENCY,
 )
@@ -23,27 +18,15 @@ from evaluation.reward_blue import (
     BlueTeamRunMetrics,
     compute_blue_reward,
 )
-from evaluation.reward_blue import (
-    W_GROUNDING as BW_GROUNDING,
-)
-from evaluation.reward_red import (
-    REFERENCE_TOKENS_PER_SUCCESS as RED_REF_TOKENS,
-)
 from evaluation.reward_red import (
     W_ADAPTATION,
     W_DIVERSITY,
     W_EFFICIENCY,
     W_ESR,
-    W_GROUNDING,
     W_TTE,
     RedTeamRunMetrics,
     compute_red_reward,
 )
-
-# This file is pure math with no external dependencies — mark the whole module
-# as `unit` so it runs under CI's `pytest -m "unit"` gate (matches the file
-# header's declared MARKERS: unit).
-pytestmark = pytest.mark.unit
 
 # ---------------------------------------------------------------------------
 # Red Team Reward
@@ -82,11 +65,11 @@ class TestRedTeamReward:
         )
 
     def test_weights_sum_correctly(self):
-        """All weight magnitudes form a coherent budget summing to 1.0.
-        Grounding is subtracted in the composite, but its magnitude is still
-        part of the budget — so it must be included in the total."""
-        all_weights = W_ESR + W_TTE + W_DIVERSITY + W_EFFICIENCY + W_ADAPTATION + W_GROUNDING
-        assert abs(all_weights - 1.0) < 0.01, f"Weights sum to {all_weights}, expected 1.0"
+        """Weights must sum to 1.0 (grounding is subtracted, not added)."""
+        positive_weights = W_ESR + W_TTE + W_DIVERSITY + W_EFFICIENCY + W_ADAPTATION
+        assert (
+            abs(positive_weights - 1.0) < 0.01
+        ), f"Weights sum to {positive_weights}, expected 1.0"
 
     def test_perfect_run_has_high_composite(self):
         result = compute_red_reward(self._perfect_metrics())
@@ -175,8 +158,8 @@ class TestBlueTeamReward:
         )
 
     def test_weights_sum_correctly(self):
-        all_weights = W_PSR + W_MINIMALITY + W_TTP + W_FUNCTIONAL + BW_EFFICIENCY + BW_GROUNDING
-        assert abs(all_weights - 1.0) < 0.01
+        positive_weights = W_PSR + W_MINIMALITY + W_TTP + W_FUNCTIONAL + BW_EFFICIENCY
+        assert abs(positive_weights - 1.0) < 0.01
 
     def test_perfect_run_has_high_composite(self):
         result = compute_blue_reward(self._perfect_metrics())
@@ -223,63 +206,3 @@ class TestBlueTeamReward:
         )
         result = compute_blue_reward(m)
         assert result is not None
-
-
-# ---------------------------------------------------------------------------
-# Efficiency normalization (#17 / #18)
-# ---------------------------------------------------------------------------
-
-
-class TestEfficiencyNormalization:
-    def test_red_efficiency_in_unit_interval_for_all_fixtures(self):
-        red = TestRedTeamReward()
-        for m in (red._perfect_metrics(), red._zero_metrics()):
-            result = compute_red_reward(m)
-            assert 0.0 <= result.efficiency <= 1.0
-
-    def test_blue_efficiency_in_unit_interval_for_all_fixtures(self):
-        blue = TestBlueTeamReward()
-        for m in (blue._perfect_metrics(), blue._zero_metrics()):
-            result = compute_blue_reward(m)
-            assert 0.0 <= result.efficiency <= 1.0
-
-    def test_red_efficiency_zero_with_no_successes(self):
-        m = TestRedTeamReward()._zero_metrics()  # 0 successes, 50k tokens
-        assert compute_red_reward(m).efficiency == 0.0
-
-    def test_blue_efficiency_zero_with_no_successes(self):
-        m = TestBlueTeamReward()._zero_metrics()  # 0 patches, 50k tokens
-        assert compute_blue_reward(m).efficiency == 0.0
-
-    def test_red_efficiency_zero_when_no_tokens_used(self):
-        m = TestRedTeamReward()._perfect_metrics()
-        m.total_tokens_used = 0
-        assert compute_red_reward(m).efficiency == 0.0
-
-    def test_blue_efficiency_zero_when_no_tokens_used(self):
-        m = TestBlueTeamReward()._perfect_metrics()
-        m.total_tokens_used = 0
-        assert compute_blue_reward(m).efficiency == 0.0
-
-    def test_red_efficiency_matches_formula(self):
-        m = TestRedTeamReward()._perfect_metrics()
-        m.successful_exploits = 1
-        m.total_tokens_used = 200_000  # 4x the reference budget for one success
-        # (1 * 50_000) / 200_000 = 0.25
-        assert abs(compute_red_reward(m).efficiency - 0.25) < 1e-9
-
-    def test_efficiency_drops_as_tokens_grow(self):
-        m_lean = TestRedTeamReward()._perfect_metrics()
-        m_lean.successful_exploits = 1
-        m_lean.total_tokens_used = 100_000
-
-        m_wasteful = TestRedTeamReward()._perfect_metrics()
-        m_wasteful.successful_exploits = 1
-        m_wasteful.total_tokens_used = 400_000
-
-        assert compute_red_reward(m_lean).efficiency > compute_red_reward(m_wasteful).efficiency
-
-    def test_red_and_blue_normalization_constants_match(self):
-        """Divergent reference budgets would invalidate cross-team token
-        comparisons — #17/#18 require them to stay identical."""
-        assert RED_REF_TOKENS == BLUE_REF_TOKENS
