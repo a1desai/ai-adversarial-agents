@@ -5,22 +5,26 @@
 #          Enforces hard caps, validates plans, routes between agents.
 # =============================================================================
 #
-# TODO (Red Team Hire): Implement the LangGraph state machine.
-#
 # REQUIRED BEHAVIORS (enforced here — not in the LLM):
-#   ✗ Reject exploitation plans targeting services not found in recon
-#   ✗ Reject plans after 3 retries — mark as FAILED
-#   ✗ Force termination at 30 steps / 50K tokens / 15 minutes
+#   ✓ Reject exploitation plans targeting services not found in recon
+#   ✓ Reject plans after 3 retries — mark as FAILED
+#   ✓ Force termination at 30 steps / 50K tokens / 15 minutes
 #   ✓ Log every routing decision to state.supervisor_notes
 #   ✓ Evaluator gate: lightweight sanity check before routing to exploitation
 #
 # REFERENCE: Red Team Report — Section 4.2.1 and 4.3
 # =============================================================================
 
+import uuid
+
 from langgraph.graph import END, StateGraph
 from loguru import logger
 
+from agents.red_team.exploitation_agent import ExploitationAgent
+from agents.red_team.recon_agent import ReconAgent
 from agents.red_team.state import AttackOutcome, AttackPhase, RedTeamState
+from agents.red_team.verification_agent import VerificationAgent
+from evaluation.trace_logger import TraceLogger
 
 # Hard caps — DO NOT change without lead approval
 MAX_STEPS = 30
@@ -29,17 +33,126 @@ MAX_SECONDS = 900  # 15 minutes
 MAX_RETRIES = 3
 
 
-def create_red_team_graph() -> StateGraph:
-    """
-    Builds and returns the Red Team LangGraph state machine.
+# ---------------------------------------------------------------------------
+# Graph nodes
+# ---------------------------------------------------------------------------
 
-    TODO: Implement the following nodes and edges:
-        Nodes:  init_node, recon_node, exploitation_node, verification_node
-        Edges:  conditional routing based on state after each node
-        Entry:  init_node
+
+def init_node(state: RedTeamState) -> RedTeamState:
+    """Sets up a fresh engagement: trace ID, counters, initial phase."""
+    state["trace_id"] = str(uuid.uuid4())
+    state["phase"] = AttackPhase.INIT
+    state["step_count"] = 0
+    state["token_count"] = 0
+    state["retry_count"] = 0
+    state["supervisor_notes"] = []
+    logger.info(
+        f"[red/init] Engagement started trace_id={state['trace_id']} target={state['target_url']}"
+    )
+    return state
+
+
+def recon_node(state: RedTeamState) -> RedTeamState:
+    """Runs ReconAgent and stores structured recon output in state."""
+    logger.info(f"[red/recon] Starting recon on {state['target_url']}")
+    agent = ReconAgent()
+    summary = agent.run(state["target_url"])
+    state["recon_summary"] = summary
+    state["phase"] = AttackPhase.RECON
+    state["step_count"] += 1
+    state["supervisor_notes"].append(
+        f"Recon complete: {len(summary.get('ports', []))} ports, "
+        f"confidence={summary.get('confidence')}"
+    )
+    _log_trace(state, "recon_agent", "recon_complete", {"target_url": state["target_url"]}, summary)
+    return state
+
+
+def exploitation_node(state: RedTeamState) -> RedTeamState:
+    """Runs ExploitationAgent: plan_attack then execute_payload."""
+    logger.info("[red/exploitation] Planning and executing attack")
+    agent = ExploitationAgent()
+
+    plan = agent.plan_attack(state["recon_summary"], target_cve=state.get("target_cve"))
+    state["attack_plan"] = plan
+    state["target_cve"] = plan.get("cve_id") or state.get("target_cve")
+    state["step_count"] += 1
+
+    _log_trace(state, "exploitation_agent", "plan_attack", state["recon_summary"], plan)
+
+    result = agent.execute_payload(plan, state["target_url"])
+    state["payload_used"] = result.get("payload_used")
+    state["server_response"] = result.get("server_response")
+    state["exploit_claimed_success"] = result.get("outcome") == "SUCCESS"
+    state["phase"] = AttackPhase.EXPLOITATION
+    state["step_count"] += 1
+
+    _log_trace(state, "exploitation_agent", "execute_payload", plan, result)
+    state["supervisor_notes"].append(
+        f"Exploitation: claimed_success={state['exploit_claimed_success']} "
+        f"confidence={result.get('confidence')}"
+    )
+    return state
+
+
+def verification_node(state: RedTeamState) -> RedTeamState:
+    """Runs VerificationAgent to independently confirm the claimed exploit."""
+    logger.info("[red/verification] Verifying claimed exploit with grader")
+    agent = VerificationAgent()
+
+    claimed = {
+        "payload_used": state.get("payload_used"),
+        "server_response": state.get("server_response"),
+        "exploit_claimed_success": state.get("exploit_claimed_success"),
+    }
+    result = agent.verify(state["target_url"], state.get("target_cve", ""), claimed)
+
+    state["grader_confirmed"] = result.get("confirmed", False)
+    state["attack_goals_achieved"] = result.get("attack_goals_achieved", [])
+    state["phase"] = AttackPhase.VERIFICATION
+    state["step_count"] += 1
+
+    _log_trace(state, "verification_agent", "verify", claimed, result)
+    state["supervisor_notes"].append(
+        f"Verification: grader_confirmed={state['grader_confirmed']} "
+        f"goals={state['attack_goals_achieved']}"
+    )
+    return state
+
+
+# ---------------------------------------------------------------------------
+# Graph builder
+# ---------------------------------------------------------------------------
+
+
+def create_red_team_graph():
     """
-    # TODO (Red Team Hire): implement full graph
-    raise NotImplementedError("Red Team graph not yet implemented — see TODO above")
+    Builds and compiles the Red Team LangGraph state machine.
+
+    Flow: init_node -> recon_node -> exploitation_node -> verification_node
+    All conditional edges use supervisor_route(), which enforces hard caps
+    before any phase-based routing.
+    """
+    graph = StateGraph(RedTeamState)
+
+    graph.add_node("init_node", init_node)
+    graph.add_node("recon_node", recon_node)
+    graph.add_node("exploitation_node", exploitation_node)
+    graph.add_node("verification_node", verification_node)
+
+    graph.set_entry_point("init_node")
+
+    graph.add_conditional_edges("init_node", supervisor_route)
+    graph.add_conditional_edges("recon_node", supervisor_route)
+    graph.add_conditional_edges("exploitation_node", supervisor_route)
+    graph.add_conditional_edges("verification_node", supervisor_route)
+
+    return graph.compile()
+
+
+# ---------------------------------------------------------------------------
+# Routing logic (conditional edge function)
+# ---------------------------------------------------------------------------
 
 
 def supervisor_route(state: RedTeamState) -> str:
@@ -110,6 +223,11 @@ def supervisor_route(state: RedTeamState) -> str:
     return END
 
 
+# ---------------------------------------------------------------------------
+# Private helpers
+# ---------------------------------------------------------------------------
+
+
 def _terminate(state: RedTeamState, outcome: AttackOutcome, reason: str) -> str:
     """Marks the engagement as terminated and returns END."""
     state["outcome"] = outcome
@@ -147,3 +265,19 @@ def _validate_attack_plan(state: RedTeamState) -> bool:
         return False
 
     return True
+
+
+def _log_trace(
+    state: RedTeamState,
+    agent: str,
+    action: str,
+    input_data: dict,
+    output_data: dict,
+) -> None:
+    """Logs one agent step to the engagement trace file."""
+    try:
+        tracer = TraceLogger(team="red", target_cve=state.get("target_cve") or "unknown")
+        tracer.log(agent, action, input_data, output_data, tokens_used=0)
+    except Exception as exc:
+        # Trace failure must never crash the pipeline
+        logger.warning(f"[red/supervisor] Trace log failed: {exc}")
