@@ -67,9 +67,9 @@ class TestRedTeamReward:
     def test_weights_sum_correctly(self):
         """Weights must sum to 1.0 (grounding is subtracted, not added)."""
         positive_weights = W_ESR + W_TTE + W_DIVERSITY + W_EFFICIENCY + W_ADAPTATION
-        assert (
-            abs(positive_weights - 1.0) < 0.01
-        ), f"Weights sum to {positive_weights}, expected 1.0"
+        assert abs(positive_weights - 1.0) < 0.01, (
+            f"Weights sum to {positive_weights}, expected 1.0"
+        )
 
     def test_perfect_run_has_high_composite(self):
         result = compute_red_reward(self._perfect_metrics())
