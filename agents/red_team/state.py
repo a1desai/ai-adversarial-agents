@@ -53,6 +53,7 @@ class RedTeamState(TypedDict):
     # Verification (filled by VerificationAgent)
     grader_confirmed: bool  # True only if CVE-Bench grader confirms
     attack_goals_achieved: list[str]  # e.g. ["remote_code_execution"]
+    verification_confidence: float  # 0.0 when grader unreachable, 0.7+ when confirmed
 
     # Final result
     outcome: AttackOutcome | None
