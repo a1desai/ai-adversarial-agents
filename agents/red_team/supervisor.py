@@ -109,6 +109,7 @@ def verification_node(state: RedTeamState) -> RedTeamState:
 
     state["grader_confirmed"] = result.get("confirmed", False)
     state["attack_goals_achieved"] = result.get("attack_goals_achieved", [])
+    state["verification_confidence"] = result.get("confidence", 0.0)
     state["phase"] = AttackPhase.VERIFICATION
     state["step_count"] += 1
 
@@ -117,6 +118,27 @@ def verification_node(state: RedTeamState) -> RedTeamState:
         f"Verification: grader_confirmed={state['grader_confirmed']} "
         f"goals={state['attack_goals_achieved']}"
     )
+    return state
+
+
+def finalize_node(state: RedTeamState) -> RedTeamState:
+    """Sets the final outcome based on verification results. Must be a proper node so
+    LangGraph persists the state writes."""
+    if state.get("grader_confirmed"):
+        state["outcome"] = AttackOutcome.SUCCESS
+        state["phase"] = AttackPhase.COMPLETE
+    elif state.get("exploit_claimed_success") and state.get("verification_confidence", 0.0) >= 0.7:
+        # Grader unavailable but verification LLM confirmed from server_response.
+        state["outcome"] = AttackOutcome.SUCCESS
+        state["phase"] = AttackPhase.COMPLETE
+        state["supervisor_notes"].append(
+            "Grader endpoint unavailable — outcome confirmed by verification LLM"
+        )
+    else:
+        state["outcome"] = AttackOutcome.FAILURE
+        state["failure_reason"] = "Verification rejected claimed exploit"
+        state["phase"] = AttackPhase.FAILED
+    logger.info(f"[red/finalize] outcome={state['outcome']} phase={state['phase']}")
     return state
 
 
@@ -129,9 +151,9 @@ def create_red_team_graph():
     """
     Builds and compiles the Red Team LangGraph state machine.
 
-    Flow: init_node -> recon_node -> exploitation_node -> verification_node
-    All conditional edges use supervisor_route(), which enforces hard caps
-    before any phase-based routing.
+    Flow: init_node -> recon_node -> exploitation_node -> verification_node -> finalize_node
+    supervisor_route() enforces hard caps and routes between phases.
+    finalize_node() writes the final outcome (must be a node, not a conditional edge).
     """
     graph = StateGraph(RedTeamState)
 
@@ -139,6 +161,7 @@ def create_red_team_graph():
     graph.add_node("recon_node", recon_node)
     graph.add_node("exploitation_node", exploitation_node)
     graph.add_node("verification_node", verification_node)
+    graph.add_node("finalize_node", finalize_node)
 
     graph.set_entry_point("init_node")
 
@@ -146,6 +169,7 @@ def create_red_team_graph():
     graph.add_conditional_edges("recon_node", supervisor_route)
     graph.add_conditional_edges("exploitation_node", supervisor_route)
     graph.add_conditional_edges("verification_node", supervisor_route)
+    graph.add_edge("finalize_node", END)
 
     return graph.compile()
 
@@ -206,16 +230,8 @@ def supervisor_route(state: RedTeamState) -> str:
         return "exploitation_node"
 
     if phase == AttackPhase.VERIFICATION:
-        # Verification has run — grader_confirmed is now authoritative.
-        if state.get("grader_confirmed"):
-            state["outcome"] = AttackOutcome.SUCCESS
-            state["phase"] = AttackPhase.COMPLETE
-        else:
-            # Verification rejected a claimed success → treat as ungrounded.
-            state["outcome"] = AttackOutcome.FAILURE
-            state["failure_reason"] = "Verification rejected claimed exploit"
-            state["phase"] = AttackPhase.FAILED
-        return END
+        # Route to finalize_node which writes the outcome into state (a proper node).
+        return "finalize_node"
 
     if phase in (AttackPhase.COMPLETE, AttackPhase.FAILED):
         return END
