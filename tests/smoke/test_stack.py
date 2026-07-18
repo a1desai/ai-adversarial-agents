@@ -135,9 +135,9 @@ class TestDockerConnectivity:
             capture_output=True,
             text=True,
         )
-        assert "sandbox_targets" in result.stdout, (
-            "sandbox_targets network not found. Run: docker-compose up"
-        )
+        assert (
+            "sandbox_targets" in result.stdout
+        ), "sandbox_targets network not found. Run: docker-compose up"
 
     def test_dvwa_container_is_running(self):
         """DVWA target container must be running for Phase 1 testing."""
@@ -146,9 +146,9 @@ class TestDockerConnectivity:
             capture_output=True,
             text=True,
         )
-        assert "target_dvwa" in result.stdout, (
-            "DVWA container not running. Run: docker-compose -f docker-compose.targets.yml up -d"
-        )
+        assert (
+            "target_dvwa" in result.stdout
+        ), "DVWA container not running. Run: docker-compose -f docker-compose.targets.yml up -d"
 
 
 class TestNetworkIsolation:
