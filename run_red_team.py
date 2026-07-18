@@ -2,11 +2,12 @@
 Red Team pipeline runner — issue #41 gate.
 Runs: init → recon → exploitation → verification against DVWA.
 """
+
 import json
 import sys
 
-from agents.red_team.supervisor import create_red_team_graph
 from agents.red_team.state import AttackPhase, RedTeamState
+from agents.red_team.supervisor import create_red_team_graph
 
 TARGET_URL = "http://localhost:8080"
 TARGET_CVE = "CVE-2019-9053"  # DVWA SQLi — well-known, in CVE-Bench
@@ -64,7 +65,7 @@ def main():
 
     print("\nFull state (JSON):")
     serialisable = {
-        k: str(v) if not isinstance(v, (str, int, float, bool, list, dict, type(None))) else v
+        k: str(v) if not isinstance(v, str | int | float | bool | list | dict | type(None)) else v
         for k, v in final_state.items()
     }
     print(json.dumps(serialisable, indent=2))

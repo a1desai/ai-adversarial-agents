@@ -2,8 +2,10 @@
 Seeds red_procedural with a validated DVWA SQL injection playbook.
 Run once before executing the Red Team pipeline against DVWA.
 """
+
 import uuid
-from agents.shared.memory import get_collection, RED_PROCEDURAL
+
+from agents.shared.memory import RED_PROCEDURAL, get_collection
 
 PLAYBOOKS = [
     {
@@ -25,8 +27,8 @@ PLAYBOOKS = [
             "tool": "curl",
             "args_template": (
                 "-s -b /tmp/dvwa_cookies.txt -G "
-                "--data-urlencode \"id=1' OR 1=1-- \" "
-                "--data-urlencode \"Submit=Submit\""
+                '--data-urlencode "id=1\' OR 1=1-- " '
+                '--data-urlencode "Submit=Submit"'
             ),
             "target_endpoint": "/vulnerabilities/sqli/",
             "success_indicators": "First name,Surname,admin,Gordon,Brown",
@@ -135,8 +137,6 @@ PLAYBOOKS = [
 def main():
     collection = get_collection(RED_PROCEDURAL)
     print(f"[seed] red_procedural currently has {collection.count()} docs")
-
-    existing_ids = set(collection.get()["ids"])
 
     added = 0
     for pb in PLAYBOOKS:
