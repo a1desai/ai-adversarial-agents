@@ -24,10 +24,32 @@
 # REFERENCE: Blue Team Report — Section 4.2.4, 5.3
 # =============================================================================
 
+import json
+import uuid
+from datetime import UTC, datetime
+from pathlib import Path
 
-from agents.shared.ollama_client import get_client
+from loguru import logger
+
+from agents.shared.memory import BLUE_EPISODIC, get_collection, parallel_retrieval
+from agents.shared.ollama_client import ModelRole, TaskType, get_client
+
+_PROMPT_PATH = (
+    Path(__file__).parent.parent.parent / "prompts" / "blue_team" / "patch_generation_agent_v1.md"
+)
+
+_PATCH_KEYS = ["patch_diff", "confidence", "strategy_used", "rationale"]
 
 MINIMUM_CONFIDENCE_TO_DEPLOY = 0.6
+
+_MANY_PRIOR_FAILURES_THRESHOLD = 2
+_MAX_SOURCE_CHARS = 6_000  # defensive cap — read_source_file already truncates upstream
+
+_STRATEGY_HINTS = {
+    1: "primary procedural memory approach",
+    2: "alternative CWE remediation pattern (attempt 1 failed or regressed)",
+    3: "most conservative possible change (attempts 1 and 2 failed)",
+}
 
 
 class PatchGenerationAgent:
@@ -65,41 +87,68 @@ class PatchGenerationAgent:
                 "rationale":     "CWE-89 in PHP requires..."
             }
         """
-        # Step 1: Parallel memory retrieval
-        # TODO: cwe = vulnerability_analysis.get("cwe_classification", "unknown")
-        # TODO: memory = parallel_retrieval(query=cwe, team="blue", n_results_each=3)
-        # Metadata filter: {"cwe_type": cwe_type_short} for blue_procedural
+        cwe_classification = vulnerability_analysis.get("cwe_classification", "unknown")
+        logger.info(
+            f"[patch_generation] Generating patch cwe={cwe_classification} "
+            f"attempt={attempt_number}"
+        )
 
-        # Step 2: Check prior failed attempts (avoid repeating bad patches)
-        # TODO: query blue_episodic for this CVE with outcome=FAILURE
-        # Pass failure reasons to LLM so it doesn't repeat the same mistake
+        # Step 1: parallel memory retrieval, filtered to this CWE type for blue_procedural
+        cwe_type = cwe_classification.split(":", 1)[0].strip()
+        metadata_filter = {"cwe_type": cwe_type} if cwe_type and cwe_type != "unknown" else None
+        memory = parallel_retrieval(
+            cwe_classification, team="blue", n_results_each=3, metadata_filter=metadata_filter
+        )
 
-        # Step 3: On retry, use a different strategy
-        # attempt 1 → primary procedural memory approach
-        # attempt 2 → alternative CWE remediation pattern
-        # attempt 3 → most conservative approach (most minimal possible change)
+        # Step 2: prior failed attempts for this CWE — feed reasons back to avoid repeats
+        failed_prior = [
+            r for r in memory["episodic"] if r.get("metadata", {}).get("outcome") == "FAILURE"
+        ]
+        if len(failed_prior) >= _MANY_PRIOR_FAILURES_THRESHOLD:
+            logger.debug("[patch_generation] Many prior failures — expanding procedural retrieval")
+            extra = parallel_retrieval(
+                cwe_classification, team="blue", n_results_each=5, metadata_filter=metadata_filter
+            )
+            memory["procedural"] = extra["procedural"]
 
-        # Step 4: Assemble context within token budget
-        # 30% memory | 30% source code + vulnerability analysis | 40% reasoning
-        # Load system prompt from: /prompts/blue_team/patch_generation_agent_v1.md
+        # Step 3: strategy varies by attempt_number
+        strategy_hint = _STRATEGY_HINTS.get(attempt_number, _STRATEGY_HINTS[3])
 
-        # Step 5: LLM patch generation
-        # TODO: response, usage = self.llm.chat(
-        #     role=ModelRole.CODE_GEN,
-        #     task=TaskType.PATCH_GENERATION,
-        #     messages=[...],
-        #     system_prompt=...,
-        # )
+        # Step 4 + 5: assemble context and generate
+        patch = self._generate_with_llm(
+            vulnerability_analysis, source_code, memory, failed_prior, attempt_number, strategy_hint
+        )
 
-        # Step 6: Parse and validate diff format
-        # TODO: validate response is valid unified diff (starts with ---, +++)
-        # Reject and retry if malformed
+        # Step 6: validate diff format; one retry on malformed output before giving up
+        if not self._validate_diff_format(patch.get("patch_diff", "")):
+            logger.warning("[patch_generation] Malformed diff — retrying once")
+            patch = self._generate_with_llm(
+                vulnerability_analysis,
+                source_code,
+                memory,
+                failed_prior,
+                attempt_number,
+                strategy_hint,
+                retry_after_malformed=True,
+            )
+            if not self._validate_diff_format(patch.get("patch_diff", "")):
+                logger.error(
+                    "[patch_generation] Still malformed after retry — forcing confidence to 0.0"
+                )
+                patch["confidence"] = 0.0
 
-        # Step 7: Confidence check
-        # TODO: parse confidence from LLM output
-        # If < MINIMUM_CONFIDENCE_TO_DEPLOY: log warning, caller should not deploy
+        # Step 7: confidence check — caller (supervisor) must not deploy below the minimum
+        if patch.get("confidence", 0.0) < MINIMUM_CONFIDENCE_TO_DEPLOY:
+            logger.warning(
+                f"[patch_generation] confidence {patch.get('confidence')} below "
+                f"{MINIMUM_CONFIDENCE_TO_DEPLOY} — caller should not deploy"
+            )
 
-        raise NotImplementedError("PatchGenerationAgent.generate_patch() not yet implemented")
+        logger.info(
+            f"[patch_generation] strategy={patch.get('strategy_used')} "
+            f"confidence={patch.get('confidence')}"
+        )
+        return patch
 
     def _validate_diff_format(self, patch_diff: str) -> bool:
         """
@@ -131,11 +180,128 @@ class PatchGenerationAgent:
         patch_diff: str,
         outcome: str,
         failure_reason: str | None = None,
+        target_technology: str = "",
+        attack_summary: str = "",
     ):
         """
         Logs this patch attempt to blue episodic memory.
         Called after EVERY attempt — success, failure, and regression.
         """
-        # TODO: get_collection(BLUE_EPISODIC).add(...)
-        # See memory.py schema comments for full field list
-        raise NotImplementedError("_log_episode() not yet implemented")
+        episode_id = str(uuid.uuid4())
+        document = f"{cwe_classification} {patch_strategy} {failure_reason or ''}".strip()
+        metadata = {
+            "episode_id": episode_id,
+            "target_cve": target_cve,
+            "target_technology": target_technology,
+            "attack_summary": attack_summary[:500],
+            "cwe_classification": cwe_classification,
+            "patch_strategy": patch_strategy,
+            "patch_diff": patch_diff[:500],
+            "outcome": outcome,
+            "failure_reason": failure_reason or "",
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+        get_collection(BLUE_EPISODIC).add(
+            documents=[document],
+            metadatas=[metadata],
+            ids=[episode_id],
+        )
+        logger.info(f"[patch_generation] Logged episode {episode_id} outcome={outcome}")
+
+    # ---------------------------------------------------------------------------
+    # Private helpers
+    # ---------------------------------------------------------------------------
+
+    def _generate_with_llm(
+        self,
+        vulnerability_analysis: dict,
+        source_code: str,
+        memory: dict,
+        failed_prior: list[dict],
+        attempt_number: int,
+        strategy_hint: str,
+        retry_after_malformed: bool = False,
+    ) -> dict:
+        """Assembles context within the file's documented budget and calls the patch LLM."""
+        system_prompt = _PROMPT_PATH.read_text()
+
+        sections = [
+            f"## Vulnerability Analysis\n{json.dumps(vulnerability_analysis, indent=2)}",
+            f"## Source Code\n{self._truncate_source(source_code)}",
+            f"## Attempt\n{attempt_number} — {strategy_hint}",
+        ]
+
+        if memory.get("procedural"):
+            docs = "\n".join(r["document"] for r in memory["procedural"])
+            sections.append(f"## Procedural Memory (highest priority)\n{docs}")
+
+        if failed_prior:
+            reasons = "\n".join(
+                r.get("metadata", {}).get("failure_reason", "")
+                for r in failed_prior
+                if r.get("metadata", {}).get("failure_reason")
+            )
+            if reasons:
+                sections.append(f"## Prior Failed Attempts — do not repeat these\n{reasons}")
+
+        if memory.get("knowledge"):
+            docs = "\n".join(r["document"] for r in memory["knowledge"])
+            sections.append(f"## Patch Knowledge\n{docs}")
+
+        if retry_after_malformed:
+            sections.append(
+                "## IMPORTANT\nYour previous response was not a valid unified diff. "
+                "patch_diff MUST contain '---'/'+++' headers and at least one '@@' hunk."
+            )
+
+        user_msg = "\n\n".join(sections) + "\n\nReturn ONLY the JSON patch object."
+
+        response_text, usage = self.llm.chat(
+            role=ModelRole.CODE_GEN,
+            task=TaskType.PATCH_GENERATION,
+            messages=[{"role": "user", "content": user_msg}],
+            system_prompt=system_prompt,
+        )
+        logger.debug(f"[patch_generation] LLM used {usage.total} tokens")
+        return self._parse_json_response(response_text)
+
+    def _truncate_source(self, source_code: str) -> str:
+        if len(source_code) <= _MAX_SOURCE_CHARS:
+            return source_code
+        return (
+            source_code[:_MAX_SOURCE_CHARS]
+            + f"\n\n[SOURCE TRUNCATED: {len(source_code)} chars -> {_MAX_SOURCE_CHARS} max]"
+        )
+
+    def _parse_json_response(self, text: str) -> dict:
+        """Extracts JSON from LLM response, stripping markdown fences if present."""
+        text = text.strip()
+        if text.startswith("```"):
+            lines = text.splitlines()
+            end = next(
+                (i for i in range(len(lines) - 1, 0, -1) if lines[i].strip() == "```"),
+                len(lines),
+            )
+            text = "\n".join(lines[1:end])
+
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            logger.error(f"[patch_generation] LLM returned non-JSON: {text[:300]}")
+            return self._empty_patch()
+
+        for key in _PATCH_KEYS:
+            if key not in parsed:
+                logger.error(f"[patch_generation] LLM patch missing key '{key}' — using default")
+                return self._empty_patch()
+
+        return parsed
+
+    def _empty_patch(self) -> dict:
+        """Zero-confidence fallback when the LLM response can't be used."""
+        return {
+            "patch_diff": "",
+            "confidence": 0.0,
+            "strategy_used": "none — LLM response unparseable",
+            "rationale": "",
+        }
