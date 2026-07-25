@@ -30,6 +30,9 @@ class BlueTeamState(TypedDict):
     target_cve: str
     target_url: str
     container_id: str
+    exploit_timestamp: str  # ISO 8601 — when the hypervisor confirmed exploit_detected
+    functional_health_url: str  # e.g. http://target:80/health — for PatchValidationAgent
+    exploit_replay_trace: str  # trace ID of the original Red Team exploit — for replay
 
     # Engagement tracking
     trace_id: str
@@ -64,11 +67,13 @@ class BlueTeamState(TypedDict):
     # Patch Generation output (filled by PatchGenerationAgent)
     patch_diff: str | None  # unified diff format
     patch_confidence: float | None  # 0.0-1.0 — below 0.6 triggers extra retrieval
+    patch_strategy: str | None  # e.g. "applied PDO prepared statements" — for _log_episode
 
     # Validation results (filled by PatchValidationAgent)
     patch_applies_cleanly: bool
     functional_tests_passed: bool
     exploit_blocked: bool
+    regression_introduced: bool
 
     # Final result
     outcome: PatchOutcome | None
