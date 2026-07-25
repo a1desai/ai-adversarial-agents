@@ -101,6 +101,46 @@ class TestRedTeamTransport:
 
 
 # ---------------------------------------------------------------------------
+# Blue Team Transport — run_tool (verification-only allowlist)
+# ---------------------------------------------------------------------------
+
+
+class TestBlueTeamTransportRunTool:
+    def test_disallowed_tool_rejected(self):
+        bt = BlueTeamTransport()
+        result = bt.run_tool("nmap", ["-sV"], "target")
+        assert result.success is False
+        assert "not permitted" in result.error
+
+    def test_curl_in_allowed_tools(self):
+        assert "curl" in BLUE_TEAM_ALLOWED_TOOLS
+
+    def test_successful_tool_returns_truncated_output(self):
+        bt = BlueTeamTransport()
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "200"
+        mock_result.stderr = ""
+
+        with patch("agents.shared.mcp_transport.subprocess.run", return_value=mock_result):
+            result = bt.run_tool("curl", ["-s"], "http://localhost:8080/health")
+            assert result.success is True
+            assert result.raw_output == "200"
+
+    def test_timeout_returns_failure(self):
+        import subprocess
+
+        bt = BlueTeamTransport()
+        with patch(
+            "agents.shared.mcp_transport.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd="curl", timeout=30),
+        ):
+            result = bt.run_tool("curl", ["-s"], "http://localhost:8080/health")
+            assert result.success is False
+            assert "timed out" in result.error
+
+
+# ---------------------------------------------------------------------------
 # Blue Team Transport — Patch Scope Enforcement (CRITICAL)
 # ---------------------------------------------------------------------------
 

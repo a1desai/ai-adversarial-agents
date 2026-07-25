@@ -444,6 +444,76 @@ class BlueTeamTransport:
             token_estimate=_estimate_tokens(truncated),
         )
 
+    def run_tool(self, tool: str, args: list[str], target: str) -> ToolResult:
+        """
+        Executes an allowed Blue Team tool and returns structured, truncated output.
+
+        Blue Team tools are verification-only (see BLUE_TEAM_ALLOWED_TOOLS) — this
+        is used for functional health checks and exploit-replay against a patched
+        container, never for offensive actions. Mirrors RedTeamTransport.run_tool,
+        gated on the Blue Team allowlist instead of the Red Team one.
+
+        Args:
+            tool:   tool name (must be in BLUE_TEAM_ALLOWED_TOOLS)
+            args:   command arguments
+            target: target URL or IP
+
+        Returns:
+            ToolResult with structured output (never raw)
+        """
+        if tool not in BLUE_TEAM_ALLOWED_TOOLS:
+            logger.error(f"[mcp/blue] Tool '{tool}' not in allowed list")
+            return ToolResult(
+                tool=tool,
+                success=False,
+                raw_output="",
+                truncated=False,
+                token_estimate=0,
+                error=f"Tool '{tool}' is not permitted for Blue Team",
+            )
+
+        cmd = [tool] + args + [target]
+        logger.info(f"[mcp/blue] Executing: {' '.join(shlex.quote(c) for c in cmd)}")
+
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            raw = result.stdout + result.stderr
+        except subprocess.TimeoutExpired:
+            logger.warning(f"[mcp/blue] Tool '{tool}' timed out after 30s")
+            return ToolResult(
+                tool=tool,
+                success=False,
+                raw_output="",
+                truncated=False,
+                token_estimate=0,
+                error="Tool execution timed out",
+            )
+        except FileNotFoundError:
+            logger.error(f"[mcp/blue] Tool '{tool}' not found — is it installed?")
+            return ToolResult(
+                tool=tool,
+                success=False,
+                raw_output="",
+                truncated=False,
+                token_estimate=0,
+                error=f"Tool '{tool}' not found on PATH",
+            )
+
+        truncated_output, was_truncated = truncate_output(raw)
+
+        return ToolResult(
+            tool=tool,
+            success=result.returncode == 0,
+            raw_output=truncated_output,
+            truncated=was_truncated,
+            token_estimate=_estimate_tokens(truncated_output),
+        )
+
 
 # ---------------------------------------------------------------------------
 # Entry point: verify MCP transport connectivity
