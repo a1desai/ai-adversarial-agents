@@ -113,8 +113,17 @@ class RootCauseAgent:
         # Step 4: LLM root cause analysis
         analysis = self._analyze_with_llm(attack_summary, source_code, files, memory)
 
-        # Step 5 + 6: validate schema (allowed_patch_paths non-empty) before returning
-        self._validate_output(analysis)
+        # Step 5 + 6: validate schema (allowed_patch_paths non-empty) before returning.
+        # A validation failure here means there's genuinely nothing to patch (e.g. the
+        # LLM response was unparseable AND no candidate files were ever identified) —
+        # that's a real failure, but it must surface as an invalid analysis dict for the
+        # supervisor's existing ROOT_CAUSE gate to catch (empty allowed_patch_paths ->
+        # terminate FAILURE), not as an uncaught exception that crashes the whole engagement.
+        try:
+            self._validate_output(analysis)
+        except ValueError as exc:
+            logger.error(f"[root_cause] Validation failed: {exc}")
+            return analysis
 
         logger.info(
             f"[root_cause] {analysis.get('cwe_classification')} "

@@ -193,8 +193,14 @@ class TestParseJsonResponse:
         assert result["confidence"] == 0.0
         assert result["allowed_patch_paths"] == ["vulnerable.php"]
 
-    def test_non_json_response_with_no_candidates_raises(self):
-        """No candidates at all means there's genuinely nothing to patch — must fail loud."""
+    def test_non_json_response_with_no_candidates_does_not_crash(self):
+        """
+        No candidates at all means there's genuinely nothing to patch. This must NOT
+        raise out of analyze() — the supervisor's root_cause_node calls agent.analyze()
+        with no try/except (PR #61), so an uncaught ValueError here would crash the
+        whole LangGraph engagement instead of cleanly routing to FAILURE via the
+        supervisor's existing "no allowed_patch_paths" gate.
+        """
         agent = _make_agent()
         agent.transport.read_source_file = MagicMock(return_value=_source_result("<?php ?>"))
         agent.llm.chat = MagicMock(return_value=("not json", _mock_usage()))
@@ -202,8 +208,10 @@ class TestParseJsonResponse:
         with patch(
             "agents.blue_team.root_cause_agent.parallel_retrieval", return_value=_EMPTY_MEMORY
         ):
-            with pytest.raises(ValueError, match="allowed_patch_paths"):
-                agent.analyze({"target_endpoint": ""}, "blue-target-1")
+            result = agent.analyze({"target_endpoint": ""}, "blue-target-1")  # must not raise
+
+        assert result["allowed_patch_paths"] == []
+        assert result["confidence"] == 0.0
 
     def test_strips_markdown_fences(self):
         agent = _make_agent()
