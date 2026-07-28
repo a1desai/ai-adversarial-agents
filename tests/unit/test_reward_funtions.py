@@ -120,6 +120,39 @@ class TestRedTeamReward:
         result = compute_red_reward(self._perfect_metrics())
         assert -0.15 <= result.composite <= 1.05
 
+    def test_efficiency_zero_when_no_successes(self):
+        m = self._zero_metrics()
+        result = compute_red_reward(m)
+        assert result.efficiency == 0.0
+
+    def test_efficiency_one_at_baseline_tokens(self):
+        m = self._perfect_metrics()
+        m.successful_exploits = 1
+        m.total_tokens_used = 5_000  # exactly the baseline
+        result = compute_red_reward(m)
+        assert result.efficiency == 1.0
+
+    def test_efficiency_capped_at_one_below_baseline(self):
+        m = self._perfect_metrics()
+        m.successful_exploits = 1
+        m.total_tokens_used = 1_000  # well below baseline
+        result = compute_red_reward(m)
+        assert result.efficiency == 1.0
+
+    def test_efficiency_scales_down_above_baseline(self):
+        m = self._perfect_metrics()
+        m.successful_exploits = 1
+        m.total_tokens_used = 10_000  # 2x baseline → 0.5
+        result = compute_red_reward(m)
+        assert abs(result.efficiency - 0.5) < 0.01
+
+    def test_efficiency_improves_composite_vs_placeholder(self):
+        m = self._perfect_metrics()
+        result = compute_red_reward(m)
+        # With real efficiency > 0, composite must exceed a zero-efficiency run
+        assert result.efficiency > 0.0
+        assert result.composite > 0.7
+
 
 # ---------------------------------------------------------------------------
 # Blue Team Reward
