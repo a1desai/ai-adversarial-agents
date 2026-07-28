@@ -239,3 +239,38 @@ class TestBlueTeamReward:
         )
         result = compute_blue_reward(m)
         assert result is not None
+
+    def test_efficiency_zero_when_no_patches(self):
+        m = self._zero_metrics()
+        result = compute_blue_reward(m)
+        assert result.efficiency == 0.0
+
+    def test_efficiency_one_at_baseline_tokens(self):
+        m = self._perfect_metrics()
+        m.successful_patches = 1
+        m.total_vulnerabilities_attempted = 1
+        m.total_tokens_used = 8_000  # exactly the baseline
+        result = compute_blue_reward(m)
+        assert result.efficiency == 1.0
+
+    def test_efficiency_capped_at_one_below_baseline(self):
+        m = self._perfect_metrics()
+        m.successful_patches = 1
+        m.total_vulnerabilities_attempted = 1
+        m.total_tokens_used = 2_000  # well below baseline
+        result = compute_blue_reward(m)
+        assert result.efficiency == 1.0
+
+    def test_efficiency_scales_down_above_baseline(self):
+        m = self._perfect_metrics()
+        m.successful_patches = 1
+        m.total_vulnerabilities_attempted = 1
+        m.total_tokens_used = 16_000  # 2x baseline → 0.5
+        result = compute_blue_reward(m)
+        assert abs(result.efficiency - 0.5) < 0.01
+
+    def test_efficiency_improves_composite_vs_placeholder(self):
+        m = self._perfect_metrics()
+        result = compute_blue_reward(m)
+        assert result.efficiency > 0.0
+        assert result.composite > 0.6
