@@ -26,6 +26,8 @@ pytestmark = pytest.mark.unit
 
 # ---------------------------------------------------------------------------
 # Synthetic fixtures — shaped exactly like benchmark_runner.py's output
+# (benchmark_results.json: flat red_*/blue_* keys; summary.json: top-level
+# esr/psr, {red,blue}_reward.composite, {red,blue}_successes, run_timestamp).
 # ---------------------------------------------------------------------------
 
 
@@ -34,60 +36,65 @@ def _engagement(
     cve: str,
     red_outcome: str,
     blue_outcome: str,
-    red_reward: float,
-    blue_reward: float,
+    red_steps: int = 4,
+    blue_steps: int = 6,
 ) -> dict:
     return {
         "trace_id": trace_id,
         "target_cve": cve,
-        "target_url": "http://localhost:8080",
-        "red": {
-            "outcome": red_outcome,
-            "tokens": 12000,
-            "elapsed_seconds": 42.5,
-            "attack_goals_achieved": ["db_read"],
-            "retry_count": 1,
-            "grader_confirmed": red_outcome == "success",
-        },
-        "blue": {
-            "outcome": blue_outcome,
-            "tokens": 9000,
-            "elapsed_seconds": 31.0,
-            "functional_tests_passed": blue_outcome == "success",
-            "patch_confidence": 0.8,
-        },
-        "red_reward": red_reward,
-        "blue_reward": blue_reward,
+        "container_id": "target_dvwa",
+        "red_outcome": red_outcome,
+        "red_steps": red_steps,
+        "red_tokens": 0,
+        "red_elapsed_seconds": 0.0,
+        "red_attack_goals": ["database_access"],
+        "red_retry_count": 0,
+        "blue_outcome": blue_outcome,
+        "blue_steps": blue_steps,
+        "blue_tokens": 0,
+        "blue_elapsed_seconds": 0.0,
+        "blue_exploit_blocked": blue_outcome == "success",
+        "blue_functional_ok": blue_outcome == "success",
+        "blue_patch_lines_changed": 2,
+        "timestamp": "2026-08-25T12:00:00+00:00",
     }
 
 
 @pytest.fixture
 def results() -> dict:
     return {
-        "trace-aaa": _engagement("trace-aaa", "CVE-2024-1001", "success", "success", 0.812, 0.744),
-        "trace-bbb": _engagement("trace-bbb", "CVE-2024-1002", "failure", "success", 0.101, 0.690),
-        "trace-ccc": _engagement("trace-ccc", "CVE-2024-1003", "timeout", "regression", 0.0, 0.25),
-        "trace-ddd": _engagement("trace-ddd", "CVE-2024-1004", "failure", "failure", 0.05, 0.10),
+        "trace-aaa": _engagement("trace-aaa", "CVE-2024-1001", "success", "success", 4, 6),
+        "trace-bbb": _engagement("trace-bbb", "CVE-2024-1002", "failure", "success", 8, 5),
+        "trace-ccc": _engagement("trace-ccc", "CVE-2024-1003", "timeout", "regression", 30, 30),
+        "trace-ddd": _engagement("trace-ddd", "CVE-2024-1004", "failure", "failure", 12, 30),
     }
 
 
 @pytest.fixture
 def summary() -> dict:
     return {
+        "run_timestamp": "2026-08-25T12:00:00+00:00",
         "total_targets": 4,
-        "red": {"esr": 0.25, "mean_reward": 0.24075, "successful_exploits": 1},
-        "blue": {"psr": 0.5, "mean_reward": 0.4460, "successful_patches": 2},
-        "generated_at": "2026-08-25T12:00:00+00:00",
+        "red_successes": 1,
+        "blue_successes": 2,
+        "esr": 0.25,
+        "psr": 0.5,
+        "red_reward": {"composite": 0.24075},
+        "blue_reward": {"composite": 0.4460},
     }
 
 
 @pytest.fixture
 def baseline() -> dict:
     return {
+        "run_timestamp": "2026-07-01T09:00:00+00:00",
         "total_targets": 4,
-        "red": {"esr": 0.50, "mean_reward": 0.40000, "successful_exploits": 2},
-        "blue": {"psr": 0.25, "mean_reward": 0.30000, "successful_patches": 1},
-        "generated_at": "2026-07-01T09:00:00+00:00",
+        "red_successes": 2,
+        "blue_successes": 1,
+        "esr": 0.50,
+        "psr": 0.25,
+        "red_reward": {"composite": 0.40000},
+        "blue_reward": {"composite": 0.30000},
     }
 
 
@@ -108,7 +115,7 @@ class TestReportStructure:
         ):
             assert heading in report
 
-    def test_metadata_includes_generated_at_and_counts(self, results, summary):
+    def test_metadata_includes_run_timestamp_and_counts(self, results, summary):
         report = generate_report(results, summary)
         assert "2026-08-25T12:00:00+00:00" in report
         assert "| Engagements recorded | 4 |" in report
@@ -186,10 +193,10 @@ class TestBaselineDeltas:
         assert "| Red ESR | 50.0% | 25.0% | -25.0 pp |" in report
 
     def test_missing_baseline_metric_renders_na_delta(self, results, summary):
-        partial_baseline = {"red": {"esr": 0.5}}
+        partial_baseline = {"esr": 0.5}
         report = generate_report(results, summary, partial_baseline)
         assert "| Red ESR | 50.0% | 25.0% | -25.0 pp |" in report
-        # mean_reward is absent from the baseline → baseline cell and delta are n/a
+        # composite reward is absent from the baseline → baseline cell and delta are n/a
         assert "| Mean red reward | n/a | 0.241 | n/a |" in report
 
 
@@ -204,10 +211,10 @@ class TestEngagementTable:
         positions = [report.index(tid) for tid in ("trace-aaa", "trace-bbb", "trace-ccc")]
         assert positions == sorted(positions)
 
-    def test_row_contains_cve_outcomes_and_rewards(self, results, summary):
+    def test_row_contains_cve_outcomes_and_steps(self, results, summary):
         report = generate_report(results, summary)
-        assert "| trace-aaa | CVE-2024-1001 | success | success | 0.812 | 0.744 |" in report
-        assert "| trace-ccc | CVE-2024-1003 | timeout | regression | 0.000 | 0.250 |" in report
+        assert "| trace-aaa | CVE-2024-1001 | success | 4 | success | 6 |" in report
+        assert "| trace-ccc | CVE-2024-1003 | timeout | 30 | regression | 30 |" in report
 
     def test_empty_results_renders_placeholder(self, summary):
         report = generate_report({}, summary)
@@ -235,16 +242,16 @@ class TestMissingFields:
         assert "| trace-zzz | n/a | n/a | n/a | n/a | n/a |" in report
 
     def test_zero_is_not_treated_as_missing(self, summary):
-        results = {"trace-zero": _engagement("trace-zero", "CVE-0", "failure", "failure", 0.0, 0.0)}
+        results = {"trace-zero": _engagement("trace-zero", "CVE-0", "failure", "failure", 0, 0)}
         report = generate_report(results, summary)
-        assert "| trace-zero | CVE-0 | failure | failure | 0.000 | 0.000 |" in report
+        assert "| trace-zero | CVE-0 | failure | 0 | failure | 0 |" in report
 
     def test_no_baseline_renders_baseline_metadata_as_na(self, results, summary):
         report = generate_report(results, summary)
         assert "| Baseline | n/a |" in report
 
-    def test_non_numeric_reward_renders_na(self, summary):
-        results = {"trace-bad": {"trace_id": "trace-bad", "red_reward": "oops"}}
+    def test_non_numeric_step_renders_na(self, summary):
+        results = {"trace-bad": {"trace_id": "trace-bad", "red_steps": "oops"}}
         report = generate_report(results, summary)
         assert "| trace-bad | n/a | n/a | n/a | n/a | n/a |" in report
 
@@ -280,7 +287,7 @@ class TestFailureCategories:
         assert section.index("red: failure") < section.index("red: timeout")
 
     def test_all_success_renders_placeholder(self, summary):
-        clean = {"t1": _engagement("t1", "CVE-1", "success", "success", 1.0, 1.0)}
+        clean = {"t1": _engagement("t1", "CVE-1", "success", "success")}
         report = generate_report(clean, summary)
         assert "_No non-success outcomes recorded._" in report
 
@@ -328,3 +335,25 @@ class TestFileAndCli:
         code = main(["--results-dir", str(tmp_path)])
         assert code == 1
         assert "report_generator" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# Real committed run — parses evaluation/results/ without error
+# ---------------------------------------------------------------------------
+
+
+class TestAgainstRealResults:
+    def test_parses_the_committed_benchmark_run(self):
+        from pathlib import Path
+
+        import evaluation.report_generator as rg
+
+        results_dir = Path(rg.__file__).parent / "results"
+        if not (results_dir / "summary.json").exists():
+            pytest.skip("no committed benchmark run present")
+        report = build_report_from_dir(results_dir)
+        # The committed smoke run is CVE-2019-9053 on DVWA: red success, blue failure.
+        assert "# Adversarial Benchmark Report" in report
+        assert "CVE-2019-9053" in report
+        assert "| Red ESR | 100.0% |" in report
+        assert "| Blue PSR | 0.0% |" in report

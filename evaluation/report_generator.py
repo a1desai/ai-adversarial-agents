@@ -127,14 +127,17 @@ def _md_table(headers: list[str], rows: list[list[str]]) -> list[str]:
 # Aggregate metric spec — (label, key path in summary, value fmt, delta fmt)
 # ---------------------------------------------------------------------------
 
+# Key paths match evaluation/benchmark_runner.py's summary.json exactly:
+# esr/psr are top-level; mean rewards live under {red,blue}_reward.composite;
+# success counts are red_successes/blue_successes.
 _AGGREGATE_METRICS: list[tuple[str, tuple[str, ...], Any, Any]] = [
     ("Total targets", ("total_targets",), _fmt_count, _delta_count),
-    ("Red ESR", ("red", "esr"), _fmt_pct, _delta_pct),
-    ("Blue PSR", ("blue", "psr"), _fmt_pct, _delta_pct),
-    ("Mean red reward", ("red", "mean_reward"), _fmt_ratio, _delta_ratio),
-    ("Mean blue reward", ("blue", "mean_reward"), _fmt_ratio, _delta_ratio),
-    ("Successful exploits", ("red", "successful_exploits"), _fmt_count, _delta_count),
-    ("Successful patches", ("blue", "successful_patches"), _fmt_count, _delta_count),
+    ("Red ESR", ("esr",), _fmt_pct, _delta_pct),
+    ("Blue PSR", ("psr",), _fmt_pct, _delta_pct),
+    ("Mean red reward", ("red_reward", "composite"), _fmt_ratio, _delta_ratio),
+    ("Mean blue reward", ("blue_reward", "composite"), _fmt_ratio, _delta_ratio),
+    ("Successful exploits", ("red_successes",), _fmt_count, _delta_count),
+    ("Successful patches", ("blue_successes",), _fmt_count, _delta_count),
 ]
 
 
@@ -150,7 +153,7 @@ def _normalise_summary(raw: dict | None) -> dict:
 
 
 def _baseline_label(baseline: dict) -> str:
-    for key in ("label", "name", "generated_at"):
+    for key in ("label", "name", "run_timestamp", "generated_at"):
         value = baseline.get(key)
         if value:
             return str(value)
@@ -165,7 +168,7 @@ def _baseline_label(baseline: dict) -> str:
 def _metadata_section(results: dict, summary: dict, baseline: dict | None) -> list[str]:
     lines = ["## Run Metadata", ""]
     rows = [
-        ["Generated at", _cell(summary.get("generated_at"))],
+        ["Generated at", _cell(summary.get("run_timestamp") or summary.get("generated_at"))],
         ["Total targets", _fmt_count(summary.get("total_targets"))],
         ["Engagements recorded", _fmt_count(len(results))],
         ["Baseline", _cell(_baseline_label(baseline)) if baseline else NA],
@@ -214,10 +217,10 @@ def _engagement_section(results: dict) -> list[str]:
             [
                 _cell(record.get("trace_id", trace_id)),
                 _cell(record.get("target_cve")),
-                _cell(_dig(record, ("red", "outcome"))),
-                _cell(_dig(record, ("blue", "outcome"))),
-                _fmt_ratio(record.get("red_reward")),
-                _fmt_ratio(record.get("blue_reward")),
+                _cell(record.get("red_outcome")),
+                _fmt_count(record.get("red_steps")),
+                _cell(record.get("blue_outcome")),
+                _fmt_count(record.get("blue_steps")),
             ]
         )
 
@@ -225,9 +228,9 @@ def _engagement_section(results: dict) -> list[str]:
         "Trace ID",
         "CVE",
         "Red Outcome",
+        "Red Steps",
         "Blue Outcome",
-        "Red Reward",
-        "Blue Reward",
+        "Blue Steps",
     ]
     lines.extend(_md_table(headers, rows))
     lines.append("")
@@ -248,7 +251,7 @@ def failure_categories(results: dict) -> list[tuple[str, int]]:
         if not isinstance(record, dict):
             continue
         for team in ("red", "blue"):
-            outcome = _dig(record, (team, "outcome"))
+            outcome = record.get(f"{team}_outcome")
             if isinstance(outcome, str) and outcome.lower() == SUCCESS_OUTCOME:
                 continue
             label = f"{team}: {outcome}" if outcome else f"{team}: {NA}"
