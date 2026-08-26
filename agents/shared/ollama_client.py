@@ -78,6 +78,7 @@ TEMPERATURE_MAP = {
 TOP_P = 0.9
 REPEAT_PENALTY = 1.1
 MAX_TOKENS = 2048  # per completion — Supervisor enforces 50K total per engagement
+NUM_CTX = 8192  # context window — 4096 default overflows with episodic memory growth
 
 
 # ---------------------------------------------------------------------------
@@ -177,6 +178,7 @@ class OllamaClient:
                     "top_p": TOP_P,
                     "repeat_penalty": REPEAT_PENALTY,
                     "num_predict": MAX_TOKENS,
+                    "num_ctx": NUM_CTX,
                 },
             )
         except Exception as e:
