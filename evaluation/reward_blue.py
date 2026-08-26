@@ -85,8 +85,15 @@ def compute_blue_reward(m: BlueTeamRunMetrics) -> BlueTeamRewardResult:
     # Functional preservation: tests still pass after patching
     functional = m.functional_tests_passed / max(m.total_functional_tests, 1)
 
-    # Efficiency: TODO — define normalization
-    efficiency = 0.0  # placeholder
+    # Efficiency: patches per token, normalized against a minimum realistic token budget.
+    # BASELINE = minimum tokens for a clean log→root_cause→patch→validate cycle (~8K).
+    # Score = 1.0 at or below baseline, scales down linearly to ~0.18 at the 50K cap.
+    # Zero patches → zero efficiency regardless of tokens spent.
+    _BASELINE_TOKENS_PER_PATCH = 8_000
+    efficiency = min(
+        1.0,
+        (m.successful_patches * _BASELINE_TOKENS_PER_PATCH) / max(m.total_tokens_used, 1),
+    )
 
     # Grounding penalty: changes outside Vulnerability Analysis scope
     grounding_penalty = m.ungrounded_changes / max(m.total_patch_changes, 1)
